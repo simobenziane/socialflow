@@ -1,0 +1,127 @@
+{
+  "name": "W-Agent1: Config Generator v15.2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "w-agent1-config",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 300],
+      "id": "agent1-webhook",
+      "name": "Webhook Trigger",
+      "webhookId": "w-agent1-config-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W-Agent1 v14: Prepare Context\n * Validates input and prepares context for generation steps\n * Phase 2.7: Added isEnglish flag for language-specific prompts\n */\nconst fs = require('fs');\n\nconsole.log('[Agent1] ═══════════════════════════════════════════════════════');\nconsole.log('[Agent1] Starting Config Generator v14 (Multi-Step)');\nconsole.log('[Agent1] ═══════════════════════════════════════════════════════');\n\nconst input = $input.first().json || {};\nconst body = input.body || input;\n\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst startTime = Date.now();\n\nconst slug = body.slug;\nconst onboarding = body.onboarding;\n\nif (!slug) {\n  return [{ json: { success: false, error: 'Missing slug' } }];\n}\nif (!onboarding?.business_description) {\n  return [{ json: { success: false, error: 'Missing business_description' } }];\n}\n\nconst lang = onboarding.language || 'fr';\nconst isEnglish = lang === 'en';\nconst langMap = { fr: 'French', de: 'German', en: 'English' };\nconst langName = langMap[lang] || 'French';\n\nconsole.log(`[Agent1] Client: ${slug}, Language: ${langName}, isEnglish: ${isEnglish}`);\n\nlet settings;\ntry {\n  settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n} catch (e) {\n  return [{ json: { success: false, error: 'Cannot load settings.json' } }];\n}\n\nconst OLLAMA_URL = settings.ollama?.url_docker || 'http://host.docker.internal:11434/api/generate';\nconst OLLAMA_MODEL = settings.ollama?.models?.config_generator || 'llama3.2:3b';\n\nconsole.log(`[Agent1] Model: ${OLLAMA_MODEL}`);\n\nreturn [{ json: {\n  slug,\n  onboarding,\n  lang,\n  isEnglish,\n  langName,\n  ollama_url: OLLAMA_URL,\n  ollama_model: OLLAMA_MODEL,\n  _start_time: startTime\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "id": "agent1-prepare",
+      "name": "Prepare Context"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ollama_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json.ollama_model) }},\n  \"prompt\": {{ $json.isEnglish ? JSON.stringify(`You are a brand strategist. Write a caption brief (80-100 words) for ${$json.onboarding.business_name || $json.slug}.\n\nBusiness: ${($json.onboarding.business_description || '').substring(0, 150)}\nTone: ${$json.onboarding.brand_personality || 'professional and friendly'}\n\nInclude: brand voice, caption structure (hook + body + CTA), 3 example hooks.\n\nExample brief:\n\"Warm, artisan feel. Each caption: catchy hook (10 words), sensory description, call to action. Hooks: 'Fresh from the oven...', 'Taste the difference...', 'Your morning ritual...' No prices or superlatives.\"\n\nBrief:`) : JSON.stringify(`Tu es stratège de marque. Écris un brief de captions (80-100 mots) pour ${$json.onboarding.business_name || $json.slug}.\n\nEntreprise: ${($json.onboarding.business_description || '').substring(0, 150)}\nTon: ${$json.onboarding.brand_personality || 'chaleureux et professionnel'}\n\nInclure: voix de marque, structure (accroche + corps + CTA), 3 exemples d'accroches.\n\nExemple de brief:\n\"Ton chaleureux, artisanal. Chaque légende: accroche captivante (10 mots), description sensorielle, appel à l'action. Accroches: 'Fraîchement sorti du four...', 'Goûtez la différence...', 'Votre rituel du matin...' Pas de prix ni superlatifs.\"\n\nBrief:`) }},\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.4, \"num_predict\": 200 }\n}",
+        "options": { "timeout": 120000 }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [480, 300],
+      "id": "agent1-gen-brief",
+      "name": "Generate Brief",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst prev = $('Prepare Context').item.json;\n\nlet briefTxt = '';\n\nif (!response.response) {\n  console.log('[Agent1] Brief failed, using fallback');\n  if (prev.isEnglish) {\n    briefTxt = `# ${prev.onboarding.business_name || prev.slug}\\n\\nWarm and professional tone. Each post should hook, describe, and call to action.\\n\\nExample hooks:\\n- Discover...\\n- You'll love...\\n- The secret to...\\n\\nRules: no prices, no superlatives.`;\n  } else {\n    briefTxt = `# ${prev.onboarding.business_name || prev.slug}\\n\\nTon chaleureux et professionnel. Chaque post doit accrocher, décrire, et inviter à l'action.\\n\\nExemples d'accroches:\\n- Découvrez...\\n- Vous allez adorer...\\n- Le secret de...\\n\\nRègles: pas de prix, pas de superlatifs.`;\n  }\n} else {\n  briefTxt = response.response.trim()\n    .replace(/^```[a-z]*\\n?/gm, '').replace(/```$/gm, '')\n    .replace(/^(Here|Sure|Okay|Certainly|Voici|D'accord)[^\\n]*\\n+/i, '')\n    .trim();\n}\n\nconsole.log(`[Agent1] Brief: ${briefTxt.length} chars`);\n\nreturn [{ json: { ...prev, brief_txt: briefTxt } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "id": "agent1-extract-brief",
+      "name": "Extract Brief"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ollama_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json.ollama_model) }},\n  \"prompt\": {{ $json.isEnglish ? JSON.stringify(`Generate 12 relevant hashtags for ${$json.onboarding.business_name || $json.slug} (${($json.onboarding.business_description || '').substring(0, 80)}).\n\nExample: #bakery #artisan #freshbread #local #handmade #quality #homemade #tradition #croissant #pastry #boulangerie #goodmorning\n\nHashtags:\n#`) : JSON.stringify(`Génère 12 hashtags pertinents pour ${$json.onboarding.business_name || $json.slug} (${($json.onboarding.business_description || '').substring(0, 80)}).\n\nExemple: #boulangerie #artisan #painfrais #local #faitmaison #qualité #tradition #croissant #patisserie #viennoiserie #petitdejeuner #gourmand\n\nHashtags:\n#`) }},\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.5, \"num_predict\": 100 }\n}",
+        "options": { "timeout": 60000 }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [960, 300],
+      "id": "agent1-gen-hashtags",
+      "name": "Generate Hashtags",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst response = $json;\nconst prev = $('Extract Brief').item.json;\n\nlet hashtagsTxt = '#business #quality';\n\nif (response.response) {\n  const raw = response.response.trim();\n  const tags = raw.match(/#[\\w\\u00C0-\\u024F]+/g) || [];\n  if (tags.length > 0) {\n    hashtagsTxt = [...new Set(tags)].slice(0, 15).join(' ');\n  }\n}\n\nconsole.log(`[Agent1] Hashtags: ${hashtagsTxt}`);\n\n// Build client.yaml from template (no LLM needed)\n// YAML escaping: handle quotes, colons, special chars, newlines\nfunction escapeYamlString(s, maxLen = 200) {\n  if (!s) return '';\n  let cleaned = s\n    .replace(/\\\\/g, '\\\\\\\\')     // Escape backslashes first\n    .replace(/\"/g, '\\\\\"')       // Escape double quotes\n    .replace(/\\n/g, ' ')         // Collapse newlines to spaces\n    .replace(/\\r/g, '')          // Remove carriage returns\n    .replace(/\\t/g, ' ')         // Convert tabs to spaces\n    .trim();\n  return cleaned.substring(0, maxLen);\n}\n\n// For description field, use YAML block scalar (safer for multi-line)\nfunction escapeYamlBlock(s, maxLen = 500) {\n  if (!s) return '';\n  return s\n    .replace(/\\r\\n/g, '\\n')     // Normalize line endings\n    .replace(/\\r/g, '\\n')        // Handle CR\n    .split('\\n')\n    .map(line => '    ' + line.trim())  // Indent each line for YAML block\n    .join('\\n')\n    .substring(0, maxLen);\n}\n\nconst clientYaml = `name: \"${escapeYamlString(prev.onboarding.business_name || prev.slug)}\"\nslug: \"${prev.slug}\"\nis_active: true\nlanguage: \"${prev.lang}\"\ntimezone: \"Europe/Berlin\"\n\nbrand:\n  voice: \"${escapeYamlString(prev.onboarding.brand_personality)}\"\n  target_audience: \"${escapeYamlString(prev.onboarding.target_audience)}\"\n  description: |\n${escapeYamlBlock(prev.onboarding.business_description)}`;\n\n// ============================================\n// WRITE FILES TO FILESYSTEM\n// ============================================\nconst CLIENT_DIR = `/data/clients/${prev.slug}`;\nconst filesWritten = [];\n\ntry {\n  // Create client directory if it doesn't exist\n  if (!fs.existsSync(CLIENT_DIR)) {\n    fs.mkdirSync(CLIENT_DIR, { recursive: true });\n    console.log(`[Agent1] Created directory: ${CLIENT_DIR}`);\n  }\n\n  // Write client.yaml\n  const clientYamlPath = path.join(CLIENT_DIR, 'client.yaml');\n  fs.writeFileSync(clientYamlPath, clientYaml, 'utf8');\n  filesWritten.push('client.yaml');\n  console.log(`[Agent1] Wrote: ${clientYamlPath}`);\n\n  // Write brief.txt\n  const briefPath = path.join(CLIENT_DIR, 'brief.txt');\n  fs.writeFileSync(briefPath, prev.brief_txt, 'utf8');\n  filesWritten.push('brief.txt');\n  console.log(`[Agent1] Wrote: ${briefPath}`);\n\n  // Write hashtags.txt\n  const hashtagsPath = path.join(CLIENT_DIR, 'hashtags.txt');\n  fs.writeFileSync(hashtagsPath, hashtagsTxt, 'utf8');\n  filesWritten.push('hashtags.txt');\n  console.log(`[Agent1] Wrote: ${hashtagsPath}`);\n\n} catch (err) {\n  console.error(`[Agent1] Error writing files: ${err.message}`);\n  return [{ json: {\n    success: false,\n    error: `Failed to write config files: ${err.message}`,\n    error_code: 'FILE_WRITE_ERROR'\n  } }];\n}\n\nconst elapsed = Date.now() - prev._start_time;\nconsole.log(`[Agent1] Done in ${elapsed}ms, wrote ${filesWritten.length} files`);\n\nreturn [{ json: {\n  success: true,\n  message: `Configuration generated and saved to ${CLIENT_DIR}`,\n  data: {\n    config: {\n      brief_txt: prev.brief_txt,\n      brief_short_txt: '',\n      hashtags_txt: hashtagsTxt,\n      client_yaml: clientYaml\n    },\n    client_slug: prev.slug,\n    files_written: filesWritten,\n    client_dir: CLIENT_DIR\n  }\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "id": "agent1-build-response",
+      "name": "Build Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 300],
+      "id": "agent1-respond",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Prepare Context", "type": "main", "index": 0 }]]
+    },
+    "Prepare Context": {
+      "main": [[{ "node": "Generate Brief", "type": "main", "index": 0 }]]
+    },
+    "Generate Brief": {
+      "main": [[{ "node": "Extract Brief", "type": "main", "index": 0 }]]
+    },
+    "Extract Brief": {
+      "main": [[{ "node": "Generate Hashtags", "type": "main", "index": 0 }]]
+    },
+    "Generate Hashtags": {
+      "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]]
+    },
+    "Build Response": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}

@@ -1,0 +1,31 @@
+# ===========================================
+# Development Overrides
+# ===========================================
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# This provides:
+# - Hot-reload for frontend development
+# - Source code mounted as volume
+# - Vite dev server on port 5173
+
+version: '3.8'
+
+services:
+  socialflow-ui:
+    build:
+      context: ./socialflow-ui
+      target: builder
+    volumes:
+      # Mount source code for hot-reload
+      - ./socialflow-ui:/app
+      # Anonymous volume to preserve node_modules from build
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE=http://localhost:5678/webhook
+
+  socialflow-n8n:
+    environment:
+      - N8N_LOG_LEVEL=debug

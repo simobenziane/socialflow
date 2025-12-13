@@ -1,0 +1,58 @@
+# ===========================================
+# SocialFlow .gitignore
+# ===========================================
+
+# Dependencies
+node_modules/
+socialflow-ui/node_modules/
+
+# Build outputs
+socialflow-ui/dist/
+
+# Environment files (contains secrets)
+.env
+.env.local
+.env.*.local
+
+# Runtime data (user-specific)
+data/
+files/config/settings.json
+files/config/active_job.json
+files/config/late_accounts.json
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Claude Code files
+.claude/
+
+# Docker volumes (if local)
+socialflow-n8n-data/
+files/nul

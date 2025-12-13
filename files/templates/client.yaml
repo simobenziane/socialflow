@@ -1,0 +1,73 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENT CONFIGURATION - SocialFlow v10
+# ═══════════════════════════════════════════════════════════════════════════════
+# Location: /data/clients/{client}/client.yaml
+# This file defines the client identity, social accounts, and brand information.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLIENT IDENTITY
+# ─────────────────────────────────────────────────────────────────────────────
+name: "{Client Name}"
+slug: "{client-slug}"
+is_active: true
+
+# Language for AI captions (ISO 639-1 code)
+language: "en"
+
+# Timezone for scheduling (IANA timezone)
+timezone: "Europe/Berlin"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SOCIAL ACCOUNTS
+# ─────────────────────────────────────────────────────────────────────────────
+# Account IDs from Late.com (get these from W0 sync or Late dashboard)
+accounts:
+  instagram:
+    late_account_id: "YOUR_INSTAGRAM_ACCOUNT_ID"
+    username: "@your_username"
+  tiktok:
+    late_account_id: "YOUR_TIKTOK_ACCOUNT_ID"
+    username: "@your_username"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BRAND IDENTITY (Used in AI prompts)
+# ─────────────────────────────────────────────────────────────────────────────
+brand:
+  voice: "Friendly, professional, approachable"
+  target_audience: "Your target demographic"
+  description: |
+    Describe your business here.
+    What makes you unique?
+    Key selling points and brand personality.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEFAULT HASHTAGS (Added to all posts for this client)
+# ─────────────────────────────────────────────────────────────────────────────
+hashtags:
+  - "#yourbrand"
+  - "#relevant"
+  - "#hashtags"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLATFORM DEFAULTS
+# ─────────────────────────────────────────────────────────────────────────────
+# Which platforms to post to by default
+# Options: "ig" (Instagram), "tt" (TikTok), or "ig,tt" (both)
+platform_defaults:
+  photos:
+    feed: "ig"
+    story: "ig"
+  videos:
+    feed: "ig,tt"
+    story: "ig"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POLICY
+# ─────────────────────────────────────────────────────────────────────────────
+policy:
+  require_video_frames: true
+  video_frames_required: 4
+  require_cover_image: false
+  tiktok_video_only: true
+  story_requires_story_asset: false

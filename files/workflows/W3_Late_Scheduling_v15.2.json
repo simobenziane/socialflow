@@ -1,0 +1,263 @@
+{
+  "name": "W3: Late Scheduling v15.2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "w3-schedule",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-2368, 400],
+      "id": "e4ae9004-1724-4cd7-a132-babd649dcff8",
+      "name": "Webhook Trigger",
+      "webhookId": "w3-schedule-webhook",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W3 v15: Load Config\n * Loads settings and determines client/batch filter\n */\nconst fs = require('fs');\n\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\nconsole.log('[W3] Starting Late Scheduling workflow v15');\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\n\nconst input = $input.first().json || {};\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst ACTIVE_JOB_PATH = `${CONFIG_BASE}/active_job.json`;\nconst DB_PATH = `${CONFIG_BASE}/socialflow.db`;\nconst startTime = Date.now();\n\n// Load settings\nif (!fs.existsSync(SETTINGS_PATH)) {\n  console.log('[W3] ✗ [CONFIG_MISSING] settings.json not found');\n  return [{ json: { _error: true, error_code: 'CONFIG_MISSING', error_message: `settings.json not found at ${SETTINGS_PATH}`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\nlet settings;\ntry {\n  settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n  console.log('[W3] ✓ settings.json loaded');\n} catch (e) {\n  console.log(`[W3] ✗ [CONFIG_MISSING] Failed to parse settings.json: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'CONFIG_MISSING', error_message: `Failed to parse settings.json: ${e.message}`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\n// Check database\nif (!fs.existsSync(DB_PATH)) {\n  console.log(`[W3] ✗ [DB_NOT_FOUND] Database not found at ${DB_PATH}`);\n  return [{ json: { _error: true, error_code: 'DB_NOT_FOUND', error_message: `Database not found at ${DB_PATH}. Run init_database.js first.`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\n// Determine client/batch filter\nlet CLIENT_FILTER, BATCH_FILTER;\nif (input.client || input.body?.client) {\n  CLIENT_FILTER = input.client || input.body?.client;\n  BATCH_FILTER = input.batch || input.body?.batch;\n  console.log(`[W3] ℹ Using webhook payload: ${CLIENT_FILTER}/${BATCH_FILTER || 'all'}`);\n} else {\n  try {\n    const activeJob = JSON.parse(fs.readFileSync(ACTIVE_JOB_PATH, 'utf8'));\n    CLIENT_FILTER = activeJob.current?.client || activeJob.client;\n    BATCH_FILTER = activeJob.current?.batch || activeJob.batch;\n    console.log(`[W3] ℹ Using active_job.json: ${CLIENT_FILTER}/${BATCH_FILTER || 'all'}`);\n  } catch (e) {\n    console.log('[W3] ℹ No active_job.json, processing all APPROVED items');\n  }\n}\n\nconst source = input.body ? 'webhook' : 'active_job';\nconsole.log(`[W3] ℹ Source: ${source}`);\nif (CLIENT_FILTER) console.log(`[W3] ℹ Filter by client: ${CLIENT_FILTER}`);\nif (BATCH_FILTER) console.log(`[W3] ℹ Filter by batch: ${BATCH_FILTER}`);\n\n// Security: Validate slugs contain only safe characters (prevent path traversal)\nconst SAFE_SLUG = /^[a-zA-Z0-9_-]+$/;\nif (CLIENT_FILTER && !SAFE_SLUG.test(CLIENT_FILTER)) {\n  console.log('[W3] ✗ [INVALID_SLUG] Invalid characters in client slug');\n  return [{ json: { _error: true, error_code: 'INVALID_SLUG', error_message: `Invalid client slug format: ${CLIENT_FILTER}. Only alphanumeric, dash, and underscore allowed.`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\nif (BATCH_FILTER && !SAFE_SLUG.test(BATCH_FILTER)) {\n  console.log('[W3] ✗ [INVALID_SLUG] Invalid characters in batch slug');\n  return [{ json: { _error: true, error_code: 'INVALID_SLUG', error_message: `Invalid batch slug format: ${BATCH_FILTER}. Only alphanumeric, dash, and underscore allowed.`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\nif (CLIENT_FILTER || BATCH_FILTER) console.log('[W3] ✓ Slug validation passed');\n\nconst CLOUDFLARE_URL = settings.cloudflare_tunnel_url || '';\nif (!CLOUDFLARE_URL || CLOUDFLARE_URL.includes('PASTE-YOUR') || CLOUDFLARE_URL.includes('your-tunnel') || CLOUDFLARE_URL.includes('example') || CLOUDFLARE_URL.includes('xxx')) {\n  console.log('[W3] ✗ [CONFIG_MISSING] Cloudflare tunnel URL not configured');\n  return [{ json: { _error: true, error_code: 'CONFIG_MISSING', error_message: 'Cloudflare tunnel URL not configured. Set it in Settings page first. Media files cannot be scheduled without a valid tunnel URL.', _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\nreturn [{ json: { client_filter: CLIENT_FILTER || null, batch_filter: BATCH_FILTER || null, source, db_path: DB_PATH, cloudflare_url: CLOUDFLARE_URL, local_base: settings.paths?.docker_base || '/data/clients', _start_time: startTime, _config_base: CONFIG_BASE } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2144, 304],
+      "id": "7774e3b0-000b-4d86-972d-ce936b941778",
+      "name": "Load Config"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [{ "id": "error-check", "leftValue": "={{ $json._error }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-1920, 304],
+      "id": "33c13e2f-921b-4bb1-beba-046dc3216b80",
+      "name": "Config Error?"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W3 v15: Config Error Handler\n * Early exit for configuration errors\n */\nconst fs = require('fs');\nconst input = $input.first().json;\nconst startTime = input._start_time || Date.now();\nconst configBase = input._config_base || '/data/clients/_config';\n\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\nconsole.log(`[W3] ✗ Configuration error: ${input.error_code}`);\nconsole.log(`[W3]   ${input.error_message}`);\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\n\nconst jobPath = `${configBase}/active_job.json`;\ntry {\n  let jobs = { current: {}, executions: {} };\n  if (fs.existsSync(jobPath)) jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n  if (!jobs.executions) jobs.executions = {};\n  jobs.executions.W3 = { last_run: new Date().toISOString(), status: 'failed', client: input.client_filter || null, batch: input.batch_filter || null, duration_ms: Date.now() - startTime, error_code: input.error_code, error_message: input.error_message };\n  fs.writeFileSync(jobPath, JSON.stringify(jobs, null, 2));\n  console.log('[W3] ✓ Job status written to active_job.json');\n} catch (e) {\n  console.log(`[W3] ⚠ Could not write job status: ${e.message}`);\n}\n\nreturn [{ json: { success: false, workflow: 'W3', status: 'failed', error_code: input.error_code, error_message: input.error_message, client: input.client_filter || null, batch: input.batch_filter || null, timestamp: new Date().toISOString() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1680, 400],
+      "id": "a50ba0cf-162d-4bb0-8571-0385ca981229",
+      "name": "Config Error Handler"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W3 v15: Get APPROVED Items\n * Queries database for approved items ready for scheduling\n */\nconst Database = require('better-sqlite3');\nconst fs = require('fs');\nconst crypto = require('crypto');\n\nconst config = $input.first().json;\nconsole.log(`[W3] ℹ Opening database: ${config.db_path}`);\n\nlet db;\ntry {\n  db = new Database(config.db_path);\n  db.pragma('foreign_keys = ON');\n} catch (e) {\n  console.log(`[W3] ✗ [DB_ERROR] Failed to open database: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'DB_ERROR', error_message: `Failed to open database: ${e.message}`, client_filter: config.client_filter, batch_filter: config.batch_filter, _start_time: config._start_time, _config_base: config._config_base } }];\n}\n\ntry {\n  let query = `\n    SELECT ci.*, c.slug as client_slug, b.slug as batch_slug,\n      ig_acc.late_account_id as db_instagram_account_id,\n      tt_acc.late_account_id as db_tiktok_account_id\n    FROM content_items ci\n    JOIN clients c ON ci.client_id = c.id\n    JOIN batches b ON ci.batch_id = b.id\n    LEFT JOIN accounts ig_acc ON c.id = ig_acc.client_id AND ig_acc.platform = 'instagram' AND (ig_acc.is_default = 1 OR ig_acc.id = (SELECT MIN(id) FROM accounts WHERE client_id = c.id AND platform = 'instagram'))\n    LEFT JOIN accounts tt_acc ON c.id = tt_acc.client_id AND tt_acc.platform = 'tiktok' AND (tt_acc.is_default = 1 OR tt_acc.id = (SELECT MIN(id) FROM accounts WHERE client_id = c.id AND platform = 'tiktok'))\n    WHERE ci.status = 'APPROVED'\n  `;\n\n  const params = [];\n  if (config.client_filter) { query += ' AND c.slug = ?'; params.push(config.client_filter); }\n  if (config.batch_filter) { query += ' AND b.slug = ?'; params.push(config.batch_filter); }\n  query += ' ORDER BY ci.scheduled_date, ci.scheduled_time';\n\n  const items = db.prepare(query).all(...params);\n  console.log(`[W3] ℹ Found ${items.length} APPROVED items`);\n\n  if (items.length === 0) {\n    let message = 'No APPROVED items found';\n    if (config.client_filter || config.batch_filter) message += ` for ${config.client_filter || 'all'}/${config.batch_filter || 'all'}`;\n    console.log(`[W3] ⚠ [NO_ITEMS] ${message}`);\n    return [{ json: { _skip: true, _no_items: true, message, _config: config } }];\n  }\n\n  const toSchedule = [];\n  const changedRows = [];\n  const alreadyScheduled = [];\n  const itemErrors = [];\n\n  for (const row of items) {\n    // Skip if already scheduled\n    if (row.late_post_id && row.late_post_id.trim() !== '') {\n      alreadyScheduled.push(row.content_id);\n      itemErrors.push({ content_id: row.content_id, code: 'ALREADY_SCHEDULED', message: `Already scheduled with post ID: ${row.late_post_id}` });\n      continue;\n    }\n\n    // Use database account IDs if item doesn't have them\n    if (!row.instagram_account_id && row.db_instagram_account_id) row.instagram_account_id = row.db_instagram_account_id;\n    if (!row.tiktok_account_id && row.db_tiktok_account_id) row.tiktok_account_id = row.db_tiktok_account_id;\n\n    // Check for file changes after approval\n    if (row.file_path) {\n      try {\n        if (fs.existsSync(row.file_path)) {\n          const buffer = fs.readFileSync(row.file_path);\n          const currentHash = crypto.createHash('md5').update(buffer).digest('hex');\n          \n          // Check against approved hash first (if exists)\n          if (row.approved_file_hash && row.approved_file_hash.trim() !== '' && currentHash !== row.approved_file_hash) {\n            console.log(`[W3] ⚠ [FILE_CHANGED] ${row.content_id}: File changed after approval`);\n            changedRows.push({ id: row.id, content_id: row.content_id, status: 'NEEDS_REVIEW', error_message: 'FILE_CHANGED_AFTER_APPROVAL' });\n            itemErrors.push({ content_id: row.content_id, code: 'FILE_CHANGED', message: 'File changed after approval - reset to NEEDS_REVIEW' });\n            continue;\n          }\n          // Fallback: check against ingest hash if no approval hash\n          else if ((!row.approved_file_hash || row.approved_file_hash.trim() === '') && row.file_hash && row.file_hash.trim() !== '' && currentHash !== row.file_hash) {\n            console.log(`[W3] ⚠ [FILE_CHANGED] ${row.content_id}: File changed since ingest (no approval hash)`);\n            changedRows.push({ id: row.id, content_id: row.content_id, status: 'NEEDS_REVIEW', error_message: 'FILE_CHANGED_SINCE_INGEST' });\n            itemErrors.push({ content_id: row.content_id, code: 'FILE_CHANGED', message: 'File changed since ingest - reset to NEEDS_REVIEW' });\n            continue;\n          }\n        }\n      } catch (e) {\n        console.log(`[W3] ⚠ Could not verify file hash for ${row.content_id}: ${e.message}`);\n      }\n    }\n\n    toSchedule.push(row);\n  }\n\n  console.log(`[W3] ℹ To schedule: ${toSchedule.length}`);\n  console.log(`[W3] ℹ Already scheduled: ${alreadyScheduled.length}`);\n  console.log(`[W3] ℹ File changed: ${changedRows.length}`);\n\n  // Update changed rows\n  if (changedRows.length > 0) {\n    const updateStmt = db.prepare(`UPDATE content_items SET status = ?, error_message = ?, approved_file_hash = NULL WHERE content_id = ?`);\n    const updateMany = db.transaction((rows) => { for (const row of rows) updateStmt.run(row.status, row.error_message, row.content_id); });\n    updateMany(changedRows);\n    console.log(`[W3] ✓ Reset ${changedRows.length} changed items to NEEDS_REVIEW`);\n  }\n\n  if (toSchedule.length === 0) {\n    let message = '';\n    if (changedRows.length > 0) message = `${changedRows.length} items had file changes and were reset. ${alreadyScheduled.length} already scheduled.`;\n    else if (alreadyScheduled.length > 0) message = `All ${alreadyScheduled.length} APPROVED items are already scheduled`;\n    else message = 'No items to schedule';\n    console.log(`[W3] ⚠ [NO_ITEMS] ${message}`);\n    return [{ json: { _skip: true, _no_items: true, message, _config: config, _changed_count: changedRows.length, _already_scheduled_count: alreadyScheduled.length, _item_errors: itemErrors } }];\n  }\n\n  return toSchedule.map((row, i) => ({ json: { ...row, _action: 'schedule', _config: config, _changed_count: changedRows.length, _already_scheduled_count: alreadyScheduled.length, _item_errors: i === 0 ? itemErrors : [] } }));\n\n} catch (e) {\n  console.log(`[W3] ✗ [DB_ERROR] Database query failed: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'DB_ERROR', error_message: `Database query failed: ${e.message}`, client_filter: config.client_filter, batch_filter: config.batch_filter, _start_time: config._start_time, _config_base: config._config_base } }];\n} finally {\n  if (db) db.close();\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1680, 208],
+      "id": "ff85ad5c-ef7e-416b-804f-0decccc984a1",
+      "name": "Get APPROVED Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [{ "id": "skip", "leftValue": "={{ $json._skip }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-1440, 208],
+      "id": "c47039fe-276b-40e6-9ab5-6979a3800ed4",
+      "name": "Any Items?"
+    },
+    {
+      "parameters": { "batchSize": 10, "options": {} },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-1200, 112],
+      "id": "e685d1b2-21bc-4d7c-bbd8-d15794db86e5",
+      "name": "Process Batches"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W3 v15: Prepare Late Data\n * Formats data for Late API call\n */\nconst item = $json;\nconsole.log(`[W3] ℹ Preparing: ${item.content_id}`);\n\nconst platforms = (item.platforms || 'ig').split(',').map(p => p.trim().toLowerCase());\nconst hasIG = platforms.includes('ig');\nconst hasTT = platforms.includes('tt');\n\n// Build caption\nlet caption = '';\nif (hasIG && hasTT) caption = (item.caption_ig || '').trim();\nelse if (hasIG) caption = (item.caption_ig || '').trim();\nelse if (hasTT) caption = (item.caption_tt || item.caption_ig || '').trim();\n\n// Build Late API parameters\nconst latePlatforms = [];\nif (hasIG) latePlatforms.push('instagram');\nif (hasTT) latePlatforms.push('tiktok');\n\nconst igAccounts = [];\nconst ttAccounts = [];\nif (hasIG && item.instagram_account_id) igAccounts.push(item.instagram_account_id);\nif (hasTT && item.tiktok_account_id) ttAccounts.push(item.tiktok_account_id);\n\nif (hasIG && igAccounts.length === 0) console.log(`[W3] ⚠ No Instagram account ID for ${item.content_id}`);\nif (hasTT && ttAccounts.length === 0) console.log(`[W3] ⚠ No TikTok account ID for ${item.content_id}`);\n\n// Validate media_type (expected: 'photo' or 'video', Late.com uses 'image'/'video')\nconst VALID_MEDIA_TYPES = ['photo', 'video'];\nif (!VALID_MEDIA_TYPES.includes(item.media_type)) {\n  console.log(`[W3] ⚠ Unexpected media_type '${item.media_type}' for ${item.content_id}, defaulting to image`);\n}\nconst lateMediaType = item.media_type === 'video' ? 'video' : 'image';\nconsole.log(`[W3] ℹ Media: ${lateMediaType}, Platforms: ${latePlatforms.join(', ')}`);\n\nreturn { json: { id: item.id, content_id: item.content_id, retry_count: parseInt(item.retry_count || '0', 10), file_hash: item.file_hash, file_path: item.file_path, late_caption: caption, late_platforms: latePlatforms, late_schedule_at: item.schedule_at, late_timezone: item.timezone || 'Europe/Berlin', late_media_url: item.media_url, late_media_type: lateMediaType, late_filename: item.file_name, late_ig_accounts: igAccounts, late_tt_accounts: ttAccounts, _has_ig: hasIG, _has_tt: hasTT, _config: item._config, _item_errors: item._item_errors || [] } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-960, 112],
+      "id": "82627333-6637-48e0-a4fe-e48f9098be33",
+      "name": "Prepare Late Data"
+    },
+    {
+      "parameters": {
+        "method": "HEAD",
+        "url": "={{ $json.late_media_url }}",
+        "options": { "redirect": { "redirect": { "maxRedirects": 5 } }, "timeout": 3000 }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-720, 112],
+      "id": "0e9389d6-add3-4782-b297-6fda013b874f",
+      "name": "Pre-flight URL Check",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W3 v15: Check Pre-flight Result\n * Validates media URL accessibility\n */\nconst response = $json;\nconst prev = $('Prepare Late Data').item.json;\n\nconst statusCode = response.statusCode || response.status || 0;\nconst contentType = response.headers?.['content-type'] || '';\nconst contentLength = parseInt(response.headers?.['content-length'] || '0', 10);\n\nlet preflightOk = false;\nlet preflightError = '';\nlet preflightErrorCode = '';\n\nif (statusCode >= 200 && statusCode < 300) {\n  preflightOk = true;\n  console.log(`[W3] ✓ Pre-flight OK for ${prev.content_id}: ${statusCode}, ${contentLength} bytes`);\n} else if (statusCode === 0) {\n  preflightError = 'Media URL not accessible (network error or timeout)';\n  preflightErrorCode = 'URL_UNREACHABLE';\n  console.log(`[W3] ✗ [URL_UNREACHABLE] ${prev.content_id}: No response`);\n} else {\n  preflightError = `Media URL returned HTTP ${statusCode}`;\n  preflightErrorCode = 'URL_UNREACHABLE';\n  console.log(`[W3] ✗ [URL_UNREACHABLE] ${prev.content_id}: HTTP ${statusCode}`);\n}\n\nif (preflightOk && prev.late_media_type === 'image' && contentType && !contentType.includes('image')) {\n  preflightOk = false;\n  preflightError = `Invalid content type for image: ${contentType}`;\n  preflightErrorCode = 'URL_UNREACHABLE';\n}\nif (preflightOk && prev.late_media_type === 'video' && contentType && !contentType.includes('video') && !contentType.includes('octet-stream')) {\n  preflightOk = false;\n  preflightError = `Invalid content type for video: ${contentType}`;\n  preflightErrorCode = 'URL_UNREACHABLE';\n}\n\nreturn { json: { ...prev, _preflight_ok: preflightOk, _preflight_error: preflightError, _preflight_error_code: preflightErrorCode, _preflight_status: statusCode, _preflight_content_length: contentLength, _preflight_content_type: contentType } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 112],
+      "id": "60bdbe4a-28e5-42af-bcf6-a827bc391f0b",
+      "name": "Check Pre-flight Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [{ "id": "preflight", "leftValue": "={{ $json._preflight_ok }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-240, 112],
+      "id": "9f2448d7-b151-45a6-ab54-5aad7cc6cf05",
+      "name": "Pre-flight OK?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W3 v14: Handle Pre-flight Failure\n * Returns failure result for unreachable media URLs\n */\nconst prev = $json;\nconsole.log(`[W3] ✗ [URL_UNREACHABLE] Skipping Late API call: ${prev.content_id}`);\n\nreturn { json: { id: prev.id, content_id: prev.content_id, late_post_id: '', late_media_id: '', late_media_url: '', status: 'FAILED', error_message: prev._preflight_error || 'Media URL not accessible', error_code: 'URL_UNREACHABLE', retry_count: prev.retry_count + 1, approved_file_hash: '', _config: prev._config, _item_errors: prev._item_errors || [] } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "id": "daf3c074-d24d-4d74-9f4e-2e74805ee4c8",
+      "name": "Handle Pre-flight Failure"
+    },
+    {
+      "parameters": {
+        "resource": "posts",
+        "operation": "create",
+        "content": "={{ $json.late_caption }}",
+        "scheduledFor": "={{ $json.late_schedule_at }}",
+        "timezone": "={{ $json.late_timezone }}",
+        "selectedPlatforms": "={{ $json.late_platforms }}",
+        "instagramAccounts": "={{ $json.late_ig_accounts }}",
+        "tiktokAccounts": "={{ $json.late_tt_accounts }}",
+        "mediaItems": { "items": [{ "type": "={{ $json.late_media_type }}", "url": "={{ $json.late_media_url }}" }] },
+        "twitterThreadItems": { "items": [] },
+        "threadsThreadItems": { "items": [] },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-late.late",
+      "typeVersion": 1,
+      "position": [0, 208],
+      "id": "9a815199-5eac-4ea3-9502-49662c5a060b",
+      "name": "Create Late Post",
+      "credentials": { "lateApi": { "id": "f7HR2n0CeD8DnWuZ", "name": "LATE account" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W3 v14: Process Result\n * Handles Late API response and determines success/failure\n */\nconst response = $json;\nconst prev = $('Check Pre-flight Result').item.json;\n\nlet result = { id: prev.id, content_id: prev.content_id, late_post_id: '', late_media_id: '', late_media_url: '', status: 'SCHEDULED', error_message: '', error_code: null, retry_count: prev.retry_count, approved_file_hash: prev.file_hash || '', _config: prev._config, _item_errors: prev._item_errors || [] };\n\nconst postId = response.id || response._id || response.postId || response.post_id || '';\nconst hasSuccess = postId || response.success === true || (response.message && (response.message.toLowerCase().includes('success') || response.message.toLowerCase().includes('scheduled') || response.message.toLowerCase().includes('created')));\n\nconst isAuthError = response.statusCode === 401 || response.statusCode === 403 || (response.message && (response.message.toLowerCase().includes('unauthorized') || response.message.toLowerCase().includes('token') || response.message.toLowerCase().includes('expired') || response.message.toLowerCase().includes('authentication')));\n\nconst hasError = response.error || response.statusCode >= 400 || response.code === 'ERR' || (response.message && (response.message.toLowerCase().includes('error') || response.message.toLowerCase().includes('bad request') || response.message.toLowerCase().includes('invalid') || response.message.toLowerCase().includes('failed')));\n\nif (hasSuccess && !hasError) {\n  result.late_post_id = String(postId || 'scheduled');\n  result.late_media_id = String(response.mediaId || response.media_id || '');\n  result.late_media_url = String(response.mediaUrl || response.media_url || '');\n  result.error_message = response.message || 'Post scheduled successfully';\n  console.log(`[W3] ✓ Scheduled: ${prev.content_id} → ${result.late_post_id}`);\n  return { json: result };\n}\n\nif (isAuthError) {\n  result.status = 'FAILED';\n  result.error_code = 'LATE_AUTH_EXPIRED';\n  result.error_message = response.error || response.message || 'Late API authentication failed';\n  result.retry_count = prev.retry_count + 1;\n  result.approved_file_hash = '';\n  console.log(`[W3] ✗ [LATE_AUTH_EXPIRED] ${prev.content_id}: ${result.error_message}`);\n  return { json: result };\n}\n\nif (hasError) {\n  result.status = 'FAILED';\n  result.error_code = 'LATE_API_ERROR';\n  result.error_message = response.error || response.message || `HTTP ${response.statusCode || response.code || 'unknown'}`;\n  result.retry_count = prev.retry_count + 1;\n  result.approved_file_hash = '';\n  console.log(`[W3] ✗ [LATE_API_ERROR] ${prev.content_id}: ${result.error_message}`);\n  return { json: result };\n}\n\nif (response.message && !hasError) {\n  result.late_post_id = 'scheduled';\n  result.error_message = response.message;\n  console.log(`[W3] ✓ Likely scheduled: ${prev.content_id}`);\n  return { json: result };\n}\n\nresult.status = 'FAILED';\nresult.error_code = 'LATE_API_ERROR';\nresult.error_message = 'Unknown response from Late API';\nresult.retry_count = prev.retry_count + 1;\nconsole.log(`[W3] ✗ [LATE_API_ERROR] ${prev.content_id}: Unknown response`);\nreturn { json: result };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 208],
+      "id": "eaa51ca1-bbfd-42d7-a1d6-14e4e4a54296",
+      "name": "Process Result"
+    },
+    {
+      "parameters": { "jsCode": "const items = $input.all();\nreturn items;" },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 112],
+      "id": "0ea1418a-5a99-40e8-b323-f0a991fe7c6b",
+      "name": "Merge Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W3 v14: Update Database\n * Saves scheduling results to SQLite\n */\nconst Database = require('better-sqlite3');\nconst items = $input.all();\n\nif (items.length === 0) return items;\n\nconst dbPath = items[0].json._config?.db_path;\nif (!dbPath) {\n  console.log('[W3] ⚠ No database path found, skipping update');\n  return items;\n}\n\nconsole.log(`[W3] ℹ Updating database: ${dbPath}`);\nconst db = new Database(dbPath);\ndb.pragma('foreign_keys = ON');\n\ntry {\n  const updateStmt = db.prepare(`\n    UPDATE content_items\n    SET late_post_id = ?, late_media_id = ?, late_media_url = ?, status = ?, error_message = ?, retry_count = ?, approved_file_hash = ?,\n        scheduled_at = CASE WHEN ? = 'SCHEDULED' THEN datetime('now') ELSE scheduled_at END\n    WHERE content_id = ?\n  `);\n\n  const insertAudit = db.prepare(`INSERT INTO audit_log (entity_type, entity_id, action, new_value) VALUES ('content_item', ?, 'schedule', ?)`);\n\n  const updateMany = db.transaction((items) => {\n    for (const item of items) {\n      const d = item.json;\n      updateStmt.run(d.late_post_id || null, d.late_media_id || null, d.late_media_url || null, d.status, d.error_message || null, d.retry_count || 0, d.approved_file_hash || null, d.status, d.content_id);\n      if (d.status === 'SCHEDULED') {\n        insertAudit.run(d.id, JSON.stringify({ late_post_id: d.late_post_id, schedule_at: new Date().toISOString() }));\n      }\n    }\n  });\n\n  updateMany(items);\n\n  const scheduledCount = items.filter(i => i.json.status === 'SCHEDULED').length;\n  const failedCount = items.filter(i => i.json.status === 'FAILED').length;\n  console.log(`[W3] ✓ Database updated: ${scheduledCount} scheduled, ${failedCount} failed`);\n\n} finally {\n  db.close();\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 112],
+      "id": "b6fedcfc-c4a4-4190-9af6-cb625c551970",
+      "name": "Update Database"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [960, 112],
+      "id": "d8e2688f-341e-4214-9486-ca17fe8bba15",
+      "name": "Next"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W3 v14: No Items\n * Handles empty result when no APPROVED items found\n */\nconst fs = require('fs');\nconst data = $json;\nconst config = data._config || {};\nconst startTime = config._start_time || Date.now();\nconst configBase = config._config_base || '/data/clients/_config';\n\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\nconsole.log(`[W3] Summary: ${data.message || 'No APPROVED items found'}`);\nif (data._changed_count > 0) console.log(`[W3] ⚠ ${data._changed_count} items reset due to file changes`);\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\n\nconst jobPath = `${configBase}/active_job.json`;\ntry {\n  let jobs = { current: {}, executions: {} };\n  if (fs.existsSync(jobPath)) jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n  if (!jobs.executions) jobs.executions = {};\n  jobs.executions.W3 = { last_run: new Date().toISOString(), status: 'success', client: config.client_filter || null, batch: config.batch_filter || null, duration_ms: Date.now() - startTime, summary: { total: 0, scheduled: 0, failed: 0, file_changed: data._changed_count || 0, already_scheduled: data._already_scheduled_count || 0 } };\n  if (data._item_errors && data._item_errors.length > 0) jobs.executions.W3.warnings = data._item_errors;\n  fs.writeFileSync(jobPath, JSON.stringify(jobs, null, 2));\n  console.log('[W3] ✓ Job status written to active_job.json');\n} catch (e) {\n  console.log(`[W3] ⚠ Could not write job status: ${e.message}`);\n}\n\nreturn [{ json: { success: true, workflow: 'W3', status: 'success', message: data.message || 'Nothing to schedule', source: config.source || 'unknown', client: config.client_filter || null, batch: config.batch_filter || null, summary: { total: 0, scheduled: 0, failed: 0, file_changed: data._changed_count || 0, already_scheduled: data._already_scheduled_count || 0 }, database: config.db_path, timestamp: new Date().toISOString() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1200, 304],
+      "id": "2f4abfc0-5c78-451a-9663-b0b96ba6064d",
+      "name": "No Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W3 v14: Summary\n * Generates final report and writes job status\n */\nconst fs = require('fs');\nconst allResults = $input.all();\nconst results = allResults.filter(i => i.json.content_id && i.json.status && (i.json.status === 'SCHEDULED' || i.json.status === 'FAILED'));\n\nlet config = {};\nlet existingItemErrors = [];\nfor (const item of allResults) {\n  if (item.json._config) config = item.json._config;\n  if (item.json._item_errors && item.json._item_errors.length > 0) existingItemErrors = item.json._item_errors;\n}\n\nconst startTime = config._start_time || $('Load Config').first().json._start_time || Date.now();\nconst configBase = config._config_base || '/data/clients/_config';\nconst duration = Date.now() - startTime;\n\nconst scheduled = results.filter(i => i.json.status === 'SCHEDULED').length;\nconst failed = results.filter(i => i.json.status === 'FAILED').length;\nconst total = results.length;\n\nconst itemErrors = [...existingItemErrors];\nfor (const item of results) {\n  if (item.json.status === 'FAILED') {\n    itemErrors.push({ content_id: item.json.content_id, code: item.json.error_code || 'UNKNOWN', message: item.json.error_message || 'Unknown error' });\n  }\n}\n\nconst preflightFailed = results.filter(i => i.json.error_code === 'URL_UNREACHABLE').length;\n\nlet fileChanged = 0;\ntry { const firstItem = $('Get APPROVED Items').first()?.json; fileChanged = firstItem?._changed_count || 0; } catch (e) {}\n\nlet overallStatus = 'success';\nif (failed > 0 && scheduled === 0) overallStatus = 'failed';\nelse if (failed > 0) overallStatus = 'partial';\n\nconst jobPath = `${configBase}/active_job.json`;\ntry {\n  let jobs = { current: {}, executions: {} };\n  if (fs.existsSync(jobPath)) jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n  if (!jobs.executions) jobs.executions = {};\n  jobs.executions.W3 = { last_run: new Date().toISOString(), status: overallStatus, client: config.client_filter || null, batch: config.batch_filter || null, duration_ms: duration, summary: { total, scheduled, failed, preflight_failed: preflightFailed, file_changed: fileChanged } };\n  if (itemErrors.length > 0) jobs.executions.W3.errors = itemErrors;\n  fs.writeFileSync(jobPath, JSON.stringify(jobs, null, 2));\n  console.log('[W3] ✓ Job status written to active_job.json');\n} catch (e) {\n  console.log(`[W3] ⚠ Could not write job status: ${e.message}`);\n}\n\nconst report = { success: overallStatus === 'success', workflow: 'W3', version: '14', status: overallStatus, generated_at: new Date().toISOString(), duration_ms: duration, source: config.source || 'unknown', client: config.client_filter || null, batch: config.batch_filter || null, summary: { total, scheduled, failed, preflight_failed: preflightFailed, file_changed: fileChanged, success_rate: total > 0 ? ((scheduled / total) * 100).toFixed(1) + '%' : 'N/A' } };\n\nif (itemErrors.length > 0) report.errors = itemErrors;\n\nconst scheduledItems = results.filter(i => i.json.status === 'SCHEDULED').map(i => ({ content_id: i.json.content_id, late_post_id: i.json.late_post_id }));\nif (scheduledItems.length > 0) report.scheduled_items = scheduledItems;\n\nconst nextSteps = [];\nif (preflightFailed > 0) nextSteps.push(`${preflightFailed} items failed pre-flight - check Cloudflare tunnel`);\nif (failed > 0) nextSteps.push(`Check ${failed} failed items in Approval UI`);\nif (scheduled > 0) {\n  nextSteps.push(`${scheduled} posts scheduled in Late`);\n  nextSteps.push('Check Late dashboard to verify posts');\n}\nif (nextSteps.length > 0) report.next_steps = nextSteps;\n\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\nconsole.log(`[W3] Summary: ${config.client_filter || 'all'}/${config.batch_filter || 'all'}`);\nconsole.log('[W3] ───────────────────────────────────────────────────────');\nconsole.log(`[W3] Total: ${total}, Scheduled: ${scheduled}, Failed: ${failed}`);\nconsole.log(`[W3] Status: ${overallStatus.toUpperCase()}`);\nconsole.log(`[W3] Duration: ${(duration / 1000).toFixed(1)}s`);\nconsole.log('[W3] ═══════════════════════════════════════════════════════');\n\nreturn [{ json: report }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 304],
+      "id": "70cd0ea5-813a-4232-b587-d94f379d2ca3",
+      "name": "Summary"
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ $json }}", "options": {} },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1200, 304],
+      "id": "39c2dd5f-8bbd-41ca-9bc1-7cdb9b3a8f84",
+      "name": "Webhook Response"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Load Config", "type": "main", "index": 0 }]] },
+    "Load Config": { "main": [[{ "node": "Config Error?", "type": "main", "index": 0 }]] },
+    "Config Error?": { "main": [[{ "node": "Config Error Handler", "type": "main", "index": 0 }], [{ "node": "Get APPROVED Items", "type": "main", "index": 0 }]] },
+    "Config Error Handler": { "main": [[{ "node": "Webhook Response", "type": "main", "index": 0 }]] },
+    "Get APPROVED Items": { "main": [[{ "node": "Any Items?", "type": "main", "index": 0 }]] },
+    "Any Items?": { "main": [[{ "node": "No Items", "type": "main", "index": 0 }], [{ "node": "Process Batches", "type": "main", "index": 0 }]] },
+    "Process Batches": { "main": [[{ "node": "Summary", "type": "main", "index": 0 }], [{ "node": "Prepare Late Data", "type": "main", "index": 0 }]] },
+    "Prepare Late Data": { "main": [[{ "node": "Pre-flight URL Check", "type": "main", "index": 0 }]] },
+    "Pre-flight URL Check": { "main": [[{ "node": "Check Pre-flight Result", "type": "main", "index": 0 }]] },
+    "Check Pre-flight Result": { "main": [[{ "node": "Pre-flight OK?", "type": "main", "index": 0 }]] },
+    "Pre-flight OK?": { "main": [[{ "node": "Handle Pre-flight Failure", "type": "main", "index": 0 }], [{ "node": "Create Late Post", "type": "main", "index": 0 }]] },
+    "Handle Pre-flight Failure": { "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]] },
+    "Create Late Post": { "main": [[{ "node": "Process Result", "type": "main", "index": 0 }]] },
+    "Process Result": { "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]] },
+    "Merge Results": { "main": [[{ "node": "Update Database", "type": "main", "index": 0 }]] },
+    "Update Database": { "main": [[{ "node": "Next", "type": "main", "index": 0 }]] },
+    "Next": { "main": [[{ "node": "Process Batches", "type": "main", "index": 0 }]] },
+    "No Items": { "main": [[{ "node": "Webhook Response", "type": "main", "index": 0 }]] },
+    "Summary": { "main": [[{ "node": "Webhook Response", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "callerPolicy": "workflowsFromSameOwner", "availableInMCP": true },
+  "pinData": {},
+  "active": true,
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

@@ -1,0 +1,794 @@
+{
+  "name": "W2: AI Captions v15.2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "w2-captions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2100,
+        400
+      ],
+      "id": "baa18635-8eaf-4101-bf6d-d2a3e302df37",
+      "name": "Webhook Trigger",
+      "webhookId": "w2-captions-webhook",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W2 v15: Load Config (YAML)\n * Loads settings, client/batch config, instruction cascade, and builds AI prompt context\n * v15: Added two-agent model configuration\n */\nconst fs = require('fs');\nconst yaml = require('js-yaml');\n\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\nconsole.log('[W2] Starting AI Captions workflow v15 (Two-Agent System)');\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\n\nconst input = $input.first().json || {};\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst ACTIVE_JOB_PATH = `${CONFIG_BASE}/active_job.json`;\nconst DB_PATH = `${CONFIG_BASE}/socialflow.db`;\nconst AGENTS_PATH = `${CONFIG_BASE}/agents`;\nconst startTime = Date.now();\n\n// Load settings\nif (!fs.existsSync(SETTINGS_PATH)) {\n  console.log('[W2] ✗ [CONFIG_MISSING] settings.json not found');\n  return [{ json: { _error: true, error_code: 'CONFIG_MISSING', error_message: `settings.json not found at ${SETTINGS_PATH}`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\nlet settings;\ntry {\n  settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n  console.log('[W2] ✓ settings.json loaded');\n} catch (e) {\n  console.log(`[W2] ✗ [CONFIG_MISSING] Failed to parse settings.json: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'CONFIG_MISSING', error_message: `Failed to parse settings.json: ${e.message}`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\n// Check database\nif (!fs.existsSync(DB_PATH)) {\n  console.log(`[W2] ✗ [DB_NOT_FOUND] Database not found at ${DB_PATH}`);\n  return [{ json: { _error: true, error_code: 'DB_NOT_FOUND', error_message: `Database not found at ${DB_PATH}. Run init_database.js first.`, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\n// Determine client/batch\nlet CLIENT, BATCH;\nif (input.client || input.body?.client) {\n  CLIENT = input.client || input.body?.client;\n  BATCH = input.batch || input.body?.batch;\n  console.log(`[W2] ℹ Using webhook payload: ${CLIENT}/${BATCH}`);\n} else {\n  try {\n    const activeJob = JSON.parse(fs.readFileSync(ACTIVE_JOB_PATH, 'utf8'));\n    CLIENT = activeJob.current?.client || activeJob.client;\n    BATCH = activeJob.current?.batch || activeJob.batch;\n    console.log(`[W2] ℹ Using active_job.json: ${CLIENT}/${BATCH}`);\n  } catch (e) {\n    console.log(`[W2] ✗ [CONFIG_MISSING] Cannot read active_job.json: ${e.message}`);\n    return [{ json: { _error: true, error_code: 'CONFIG_MISSING', error_message: 'Cannot determine client/batch. Send {client, batch} in webhook or create active_job.json', _start_time: startTime, _config_base: CONFIG_BASE } }];\n  }\n}\n\nif (!CLIENT || !BATCH) {\n  console.log('[W2] ✗ [CONFIG_MISSING] Both client and batch are required');\n  return [{ json: { _error: true, error_code: 'CONFIG_MISSING', error_message: 'Both client and batch are required', _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\n// Security: Validate slugs contain only safe characters (prevent path traversal)\nconst SAFE_SLUG = /^[a-zA-Z0-9_-]+$/;\nif (!SAFE_SLUG.test(CLIENT) || !SAFE_SLUG.test(BATCH)) {\n  console.log('[W2] ✗ [INVALID_SLUG] Invalid characters in client/batch slug');\n  return [{ json: { _error: true, error_code: 'INVALID_SLUG', error_message: `Invalid slug format. CLIENT=${CLIENT}, BATCH=${BATCH}. Only alphanumeric, dash, and underscore allowed.`, client: CLIENT, batch: BATCH, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\nconsole.log('[W2] ✓ Slug validation passed');\n\nconst LOCAL_BASE = settings.paths?.docker_base || '/data/clients';\nconst clientRoot = `${LOCAL_BASE}/${CLIENT}`;\nconst batchRoot = `${clientRoot}/${BATCH}`;\n\n// Load client.yaml\nconst clientYamlPath = `${clientRoot}/client.yaml`;\nif (!fs.existsSync(clientYamlPath)) {\n  console.log(`[W2] ✗ [CLIENT_NOT_FOUND] client.yaml not found at ${clientYamlPath}`);\n  return [{ json: { _error: true, error_code: 'CLIENT_NOT_FOUND', error_message: `Client not found: ${CLIENT}. No client.yaml at ${clientYamlPath}`, client: CLIENT, batch: BATCH, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\nlet clientConfig;\ntry {\n  clientConfig = yaml.load(fs.readFileSync(clientYamlPath, 'utf8'));\n  console.log(`[W2] ✓ client.yaml loaded: ${clientConfig.name || CLIENT}`);\n} catch (e) {\n  console.log(`[W2] ✗ [YAML_PARSE_ERROR] Failed to parse client.yaml: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'YAML_PARSE_ERROR', error_message: `Failed to parse client.yaml: ${e.message}`, client: CLIENT, batch: BATCH, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\nif (clientConfig.is_active === false) {\n  console.log(`[W2] ✗ [CLIENT_INACTIVE] Client \"${CLIENT}\" is not active`);\n  return [{ json: { _error: true, error_code: 'CLIENT_INACTIVE', error_message: `Client \"${CLIENT}\" is not active (is_active: false in client.yaml)`, client: CLIENT, batch: BATCH, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\n// Load batch.yaml\nconst batchYamlPath = `${batchRoot}/batch.yaml`;\nif (!fs.existsSync(batchYamlPath)) {\n  console.log(`[W2] ✗ [BATCH_NOT_FOUND] batch.yaml not found at ${batchYamlPath}`);\n  return [{ json: { _error: true, error_code: 'BATCH_NOT_FOUND', error_message: `Batch not found: ${BATCH}. No batch.yaml at ${batchYamlPath}`, client: CLIENT, batch: BATCH, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\nlet batchConfig;\ntry {\n  batchConfig = yaml.load(fs.readFileSync(batchYamlPath, 'utf8'));\n  console.log(`[W2] ✓ batch.yaml loaded: ${batchConfig.name || BATCH}`);\n} catch (e) {\n  console.log(`[W2] ✗ [YAML_PARSE_ERROR] Failed to parse batch.yaml: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'YAML_PARSE_ERROR', error_message: `Failed to parse batch.yaml: ${e.message}`, client: CLIENT, batch: BATCH, _start_time: startTime, _config_base: CONFIG_BASE } }];\n}\n\n// === LOAD HASHTAGS ===\n// Get hashtags from batch.yaml and client.yaml\nconst batchHashtags = batchConfig.hashtags || [];\nconst clientHashtags = clientConfig.hashtags || [];\nconst allHashtags = [...new Set([...batchHashtags, ...clientHashtags])];\nconsole.log(`[W2] ✓ Loaded ${allHashtags.length} hashtags from config`);\n\n// === INSTRUCTION CASCADE (Phase 3) ===\n// Load language-specific system prompt\nconst clientLang = clientConfig.language || 'fr';\nconst langSuffix = clientLang === 'en' ? '_en' : '_fr';\nlet systemPrompt = '';\ntry {\n  const langPromptPath = `${AGENTS_PATH}/caption_generator${langSuffix}.md`;\n  const defaultPromptPath = `${AGENTS_PATH}/caption_generator.md`;\n  \n  if (fs.existsSync(langPromptPath)) {\n    systemPrompt = fs.readFileSync(langPromptPath, 'utf8');\n    console.log(`[W2] ✓ Language-specific prompt loaded: ${langSuffix} (${systemPrompt.length} chars)`);\n  } else if (fs.existsSync(defaultPromptPath)) {\n    systemPrompt = fs.readFileSync(defaultPromptPath, 'utf8');\n    console.log(`[W2] ✓ Default system prompt loaded (${systemPrompt.length} chars)`);\n  }\n} catch (e) {\n  console.log(`[W2] ⚠ Could not load system prompt: ${e.message}`);\n}\n\n// Load client and batch instruction overrides from database\nlet clientOverride = '';\nlet batchOverride = '';\nlet clientId = null;\nlet batchId = null;\nlet overrideDb = null;\n\ntry {\n  const Database = require('better-sqlite3');\n  overrideDb = new Database(DB_PATH, { readonly: true });\n\n  // Get client ID\n  const clientRow = overrideDb.prepare('SELECT id FROM clients WHERE slug = ?').get(CLIENT);\n  if (clientRow) {\n    clientId = clientRow.id;\n    const clientInstr = overrideDb.prepare(`\n      SELECT instruction_value FROM agent_instructions\n      WHERE agent_type = 'caption_generator'\n      AND scope = 'client' AND scope_id = ?\n      AND instruction_key = 'override' AND is_active = 1\n    `).get(clientRow.id);\n    if (clientInstr) {\n      clientOverride = clientInstr.instruction_value;\n      console.log(`[W2] ✓ Client instruction override loaded (${clientOverride.length} chars)`);\n    }\n\n    // Get batch ID and override\n    const batchRow = overrideDb.prepare('SELECT id FROM batches WHERE client_id = ? AND slug = ?').get(clientRow.id, BATCH);\n    if (batchRow) {\n      batchId = batchRow.id;\n      const batchInstr = overrideDb.prepare(`\n        SELECT instruction_value FROM agent_instructions\n        WHERE agent_type = 'caption_generator'\n        AND scope = 'batch' AND scope_id = ?\n        AND instruction_key = 'override' AND is_active = 1\n      `).get(batchRow.id);\n      if (batchInstr) {\n        batchOverride = batchInstr.instruction_value;\n        console.log(`[W2] ✓ Batch instruction override loaded (${batchOverride.length} chars)`);\n      }\n    }\n  }\n} catch (e) {\n  console.log(`[W2] ⚠ Could not load instruction overrides: ${e.message}`);\n} finally {\n  if (overrideDb) overrideDb.close();\n}\n\n// Build merged instruction context\nconst instructionContext = [\n  systemPrompt,\n  clientOverride ? `\\n--- CLIENT-SPECIFIC INSTRUCTIONS ---\\n${clientOverride}` : '',\n  batchOverride ? `\\n--- BATCH-SPECIFIC INSTRUCTIONS ---\\n${batchOverride}` : ''\n].filter(Boolean).join('\\n');\n\n// Build prompt context\nconst brand = clientConfig.brand || {};\nconst brief = batchConfig.brief || '';\n\nif (!brief || brief.trim() === '') {\n  console.log('[W2] ⚠ No brief found in batch.yaml - AI captions may be generic');\n}\n\n// v15: Two-agent model configuration\nconst OLLAMA_URL = settings.ollama?.url_docker || 'http://host.docker.internal:11434/api/generate';\nconst GENERATOR_MODEL = settings.ollama?.models?.caption_generator || settings.caption_generation?.generator_model || 'llama3.2:3b';\nconst SUPERVISOR_MODEL = settings.ollama?.models?.caption_supervisor || settings.caption_generation?.supervisor_model || 'llama3.2:3b';\nconst MAX_ROUNDS = settings.caption_generation?.max_revision_rounds || 3;\nconst GENERATOR_TIMEOUT = settings.caption_generation?.generator_timeout_ms || settings.ollama?.timeout_ms || 120000;\nconst SUPERVISOR_TIMEOUT = settings.caption_generation?.supervisor_timeout_ms || 60000;\n\nconsole.log(`[W2] ℹ Generator model: ${GENERATOR_MODEL}`);\nconsole.log(`[W2] ℹ Supervisor model: ${SUPERVISOR_MODEL}`);\nconsole.log(`[W2] ℹ Max revision rounds: ${MAX_ROUNDS}`);\n\nreturn [{ json: {\n  client: CLIENT,\n  batch: BATCH,\n  client_id: clientId,\n  batch_id: batchId,\n  batch_root: batchRoot,\n  source: input.body ? 'webhook' : 'active_job',\n  ollama_url: OLLAMA_URL,\n  generator_model: GENERATOR_MODEL,\n  supervisor_model: SUPERVISOR_MODEL,\n  max_rounds: MAX_ROUNDS,\n  generator_timeout: GENERATOR_TIMEOUT,\n  supervisor_timeout: SUPERVISOR_TIMEOUT,\n  instruction_context: instructionContext,\n  config_hashtags: allHashtags,\n  client_name: clientConfig.name || CLIENT,\n  client_language: clientLang,\n  brand_voice: brand.voice || 'Professionnelle et engageante',\n  brand_target_audience: brand.target_audience || 'Grand public',\n  brand_description: brand.description || '',\n  batch_name: batchConfig.name || BATCH,\n  batch_brief: brief,\n  db_path: DB_PATH,\n  _start_time: startTime,\n  _config_base: CONFIG_BASE\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1876,
+        304
+      ],
+      "id": "7e06cafd-aa8e-40d4-9e21-bf0e2761b484",
+      "name": "Load Config (YAML)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "error-check",
+              "leftValue": "={{ $json._error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1652,
+        304
+      ],
+      "id": "a51442b6-97f0-48d6-aaa8-ea9a2c267583",
+      "name": "Config Error?"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W2 v15: Get NEEDS_AI Items\n * Queries database for items requiring AI caption generation\n * v15: Also fetches image_description from W1\n */\nconst Database = require('better-sqlite3');\nconst config = $input.first().json;\n\nconsole.log(`[W2] ℹ Opening database: ${config.db_path}`);\n\nlet db;\ntry {\n  db = new Database(config.db_path, { readonly: true });\n} catch (e) {\n  console.log(`[W2] ✗ [DB_ERROR] Failed to open database: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'DB_ERROR', error_message: `Failed to open database: ${e.message}`, client: config.client, batch: config.batch, _start_time: config._start_time, _config_base: config._config_base } }];\n}\n\ntry {\n  // v15: Added image_description to query\n  const query = `\n    SELECT ci.*, c.slug as client_slug, b.slug as batch_slug, b.brief\n    FROM content_items ci\n    JOIN clients c ON ci.client_id = c.id\n    JOIN batches b ON ci.batch_id = b.id\n    WHERE ci.status = 'NEEDS_AI' AND c.slug = ? AND b.slug = ?\n    ORDER BY ci.scheduled_date, ci.scheduled_time\n  `;\n\n  const items = db.prepare(query).all(config.client, config.batch);\n  console.log(`[W2] ℹ Found ${items.length} NEEDS_AI items`);\n\n  if (items.length === 0) {\n    console.log('[W2] ⚠ [NO_ITEMS] No NEEDS_AI items found');\n    return [{ json: { _skip: true, _config: config, _no_items: true, message: `No NEEDS_AI items for ${config.client}/${config.batch}`, count: 0 } }];\n  }\n\n  // Count items with/without descriptions\n  const withDesc = items.filter(i => i.image_description && i.image_description.trim()).length;\n  console.log(`[W2] ℹ Items with image description: ${withDesc}/${items.length}`);\n\n  return items.map((item, index) => ({\n    json: {\n      ...item,\n      _config: config,\n      _item_index: index + 1,\n      _total_items: items.length\n    }\n  }));\n\n} catch (e) {\n  console.log(`[W2] ✗ [DB_ERROR] Database query failed: ${e.message}`);\n  return [{ json: { _error: true, error_code: 'DB_ERROR', error_message: `Database query failed: ${e.message}`, client: config.client, batch: config.batch, _start_time: config._start_time, _config_base: config._config_base } }];\n} finally {\n  if (db) db.close();\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1412,
+        208
+      ],
+      "id": "1f0dee8c-5703-42f0-a05d-fa888876eb61",
+      "name": "Get NEEDS_AI Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "skip",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1172,
+        208
+      ],
+      "id": "ff511efc-39f2-4bb6-8e26-17f327f8a1a0",
+      "name": "Has Items?"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W2 v15: Initialize Generation\n * Sets up generation progress tracking and initializes batch state\n */\nconst Database = require('better-sqlite3');\nconst items = $input.all();\n\nif (!items || items.length === 0) return items;\n\nconst config = items[0].json._config;\nconst totalItems = items.length;\n\nconsole.log(`[W2] ℹ Initializing generation for ${totalItems} items`);\n\n// Update batch generation_progress\nlet db;\ntry {\n  db = new Database(config.db_path);\n  db.pragma('foreign_keys = ON');\n\n  const progress = JSON.stringify({\n    current: 0,\n    total: totalItems,\n    stage: 'starting',\n    round: 0,\n    started_at: new Date().toISOString()\n  });\n\n  db.prepare(`\n    UPDATE batches SET\n      generation_progress = ?,\n      generation_started_at = datetime('now')\n    WHERE client_id = ? AND slug = ?\n  `).run(progress, config.client_id, config.batch);\n\n  console.log('[W2] ✓ Generation progress initialized');\n} catch (e) {\n  console.log(`[W2] ⚠ Could not initialize progress: ${e.message}`);\n} finally {\n  if (db) db.close();\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -932,
+        112
+      ],
+      "id": "init-generation-node",
+      "name": "Initialize Generation"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -692,
+        112
+      ],
+      "id": "67c76928-e7f7-4588-abe9-10d7e469bf42",
+      "name": "Process One by One"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15.2: Update Progress (Start)\n * Updates generation progress for current item\n * OPTIMIZATION: Debounced updates - only writes to DB every 2 seconds or at milestones\n */\nconst Database = require('better-sqlite3');\nconst item = $json;\nconst config = item._config;\n\nconsole.log(`[W2] ℹ Starting item ${item._item_index}/${item._total_items}: ${item.content_id}`);\n\n// Debouncing: Only update progress at milestones or every 2 seconds\nconst isFirstItem = item._item_index === 1;\nconst isLastItem = item._item_index === item._total_items;\nconst isMilestone = item._item_index % 5 === 0;  // Every 5th item\nconst lastUpdate = config._last_progress_update || 0;\nconst now = Date.now();\nconst shouldUpdate = isFirstItem || isLastItem || isMilestone || (now - lastUpdate > 2000);\n\nif (shouldUpdate) {\n  let db;\n  try {\n    db = new Database(config.db_path);\n    const progress = JSON.stringify({\n      current: item._item_index,\n      total: item._total_items,\n      stage: 'generating',\n      round: 1,\n      content_id: item.content_id\n    });\n\n    db.prepare(`\n      UPDATE batches SET generation_progress = ?\n      WHERE client_id = ? AND slug = ?\n    `).run(progress, config.client_id, config.batch);\n    config._last_progress_update = now;\n  } catch (e) {\n    console.log(`[W2] ⚠ Progress update failed: ${e.message}`);\n  } finally {\n    if (db) db.close();\n  }\n}\n\n// Generate unique session ID for conversation logging\nconst crypto = require('crypto');\nconst sessionId = `${item.content_id}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;\n\nreturn {\n  json: {\n    ...item,\n    _session_id: sessionId,\n    _round_number: 1,\n    _conversation_log: [],\n    _revision_history: [],\n    _config: { ...config, _last_progress_update: config._last_progress_update || now }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -452,
+        112
+      ],
+      "id": "update-progress-start",
+      "name": "Update Progress (Start)"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Prepare Generator Request\n * Builds text-only prompt using image_description from W1\n * v15: Uses text LLM, not VLM - image_description provides visual context\n * BUG FIX #3: For videos, use batch brief as context if no image_description\n * BUG FIX #4: Show ALL revision feedback, not just the last one\n */\nconst fs = require('fs');\nconst item = $json;\nconst config = item._config;\n\nconsole.log(`[W2] ℹ Preparing generator request (round ${item._round_number}): ${item.content_id}`);\n\n// BUG FIX #3: For videos without image_description, use batch brief as context\nlet imageContext = item.image_description || '';\nif (!imageContext && item.content_type === 'video') {\n  imageContext = `[Video content] ${config.batch_brief || 'Create an engaging caption for this video content.'}`;\n  console.log('[W2] ℹ Video without image description - using batch brief as context');\n}\n\nconst lang = config.client_language || 'fr';\nconst isVideo = item.media_type === 'video';\nconst isTikTok = (item.platforms || '').includes('tt');\n\n// BUG FIX #4: Build revision context showing ALL previous feedback\nlet revisionContext = '';\nif (item._revision_history && item._revision_history.length > 0) {\n  const allFeedback = item._revision_history.map((h, i) => \n    `Round ${i + 1}: \"${h.caption}\" - Feedback: ${h.feedback}`\n  ).join('\\n');\n  revisionContext = `\n\n=== REVISION HISTORY ===\n${allFeedback}\n\nCréer une nouvelle légende en tenant compte de TOUS ces retours.\n=== FIN RÉVISION ===\n`;\n}\n\n// Build language-specific revision context\nlet revisionContextEn = '';\nif (item._revision_history && item._revision_history.length > 0) {\n  const allFeedback = item._revision_history.map((h, i) => \n    `Round ${i + 1}: \"${h.caption}\" - Feedback: ${h.feedback}`\n  ).join('\\n');\n  revisionContextEn = `\n\n=== REVISION HISTORY ===\n${allFeedback}\n\nCreate a new caption taking into account ALL of this feedback.\n=== END REVISION ===\n`;\n}\n\n// French prompt for text LLM\nconst promptFr = `Tu es rédacteur social media pour ${config.client_name}.\n\nCONTEXTE DE LA MARQUE:\n- Ton: ${config.brand_voice}\n- Audience cible: ${config.brand_target_audience}\n${config.brand_description ? `- Description: ${config.brand_description}` : ''}\n\nBRIEF DU PROJET \"${config.batch_name}\":\n${config.batch_brief || 'Aucun brief spécifique.'}\n\n${imageContext ? `DESCRIPTION DE L'IMAGE (pour inspiration, NE PAS décrire littéralement):\n${imageContext}` : 'Pas de description d\\'image disponible - base-toi uniquement sur le brief.'}\n\nCONSIGNES:\n- Écris une légende ${isTikTok ? 'TikTok' : 'Instagram'} en 2-3 lignes maximum\n- Commence par une accroche captivante (10 mots max)\n- Évoque l'expérience, l'émotion, l'ambiance - PAS une description littérale\n- Termine par un appel à l'action subtil\n- ${isTikTok ? 'TikTok: court et punchy' : 'Instagram: engageant et authentique'}\n\nHASHTAGS:\n- Termine TOUJOURS par 5-7 hashtags pertinents en français\n- Inclus ces hashtags de marque: ${(config.config_hashtags || []).slice(0, 3).join(' ') || '#instagram'}\n\nINTERDIT\n- PAS de guillemets autour du texte\n- PAS de mention de pays (France, Allemagne, Berlin, Paris, etc.)\n- PAS de mots anglais - écris UNIQUEMENT en français\n- PAS de \"Voici\" ou \"Légende:\" au début\n- PAS de noms de marques/commerces autres que ${config.client_name}${revisionContext}\n\nÉcris UNIQUEMENT la légende (sans guillemets):`;\n\n// English prompt for text LLM\nconst promptEn = `You are a social media copywriter for ${config.client_name}.\n\nBRAND CONTEXT:\n- Tone: ${config.brand_voice}\n- Target audience: ${config.brand_target_audience}\n${config.brand_description ? `- Description: ${config.brand_description}` : ''}\n\nPROJECT BRIEF \"${config.batch_name}\":\n${config.batch_brief || 'No specific brief.'}\n\n${imageContext ? `IMAGE DESCRIPTION (for inspiration, do NOT describe literally):\n${imageContext}` : 'No image description available - base your caption only on the brief.'}\n\nINSTRUCTIONS:\n- Write a ${isTikTok ? 'TikTok' : 'Instagram'} caption in 2-3 lines maximum\n- Start with a catchy hook (10 words max)\n- Evoke the experience, emotion, atmosphere - NOT a literal description\n- End with a subtle call to action\n- ${isTikTok ? 'TikTok: short and punchy' : 'Instagram: engaging and authentic'}\n\nHASHTAGS:\n- ALWAYS end with 5-7 relevant hashtags\n- Include these brand hashtags: ${(config.config_hashtags || []).slice(0, 3).join(' ') || '#instagram'}\n\nFORBIDDEN\n- NO quotation marks around the text\n- NO country mentions (France, Germany, Berlin, Paris, etc.)\n- NO \"Here's\" or \"Caption:\" at the beginning\n- NO brand names other than ${config.client_name}${revisionContextEn}\n\nWrite ONLY the caption (without quotes):`;\n\nconst prompt = lang === 'en' ? promptEn : promptFr;\n\nconsole.log(`[W2] ✓ Generator prompt built (${prompt.length} chars, lang: ${lang})`);\n\nreturn {\n  json: {\n    ...item,\n    _generator_prompt: prompt,\n    _generator_start_time: Date.now()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -212,
+        112
+      ],
+      "id": "prepare-generator-request",
+      "name": "Prepare Generator Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._config.ollama_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json._config.generator_model) }},\n  \"prompt\": {{ JSON.stringify($json._generator_prompt) }},\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.7,\n    \"num_predict\": 256\n  }\n}",
+        "options": {
+          "timeout": "={{ $json._config.generator_timeout || 120000 }}"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        28,
+        112
+      ],
+      "id": "call-generator",
+      "name": "Call Caption Generator",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Process Generator Response\n * Extracts and cleans caption from generator output\n */\nconst response = $json;\nconst prev = $('Prepare Generator Request').first()?.json;\n\nif (!prev || !prev.content_id) {\n  console.log('[W2] ✗ [MISSING_DATA] No data from Prepare Generator Request node');\n  return { json: { _error: true, error_code: 'MISSING_DATA', error_message: 'Missing data from Prepare Generator Request node', status: 'FAILED' } };\n}\n\nconst generatorDuration = Date.now() - (prev._generator_start_time || Date.now());\n\n// Log the generator conversation\nconst conversationEntry = {\n  agent_type: 'caption_generator',\n  agent_model: prev._config.generator_model,\n  round_number: prev._round_number,\n  prompt: prev._generator_prompt,\n  response: response.response || response.error || 'No response',\n  duration_ms: generatorDuration,\n  status: response.error ? 'error' : 'success',\n  error_message: response.error || null\n};\n\nconst conversationLog = [...(prev._conversation_log || []), conversationEntry];\n\n// Check for errors\nif (response.error || !response.response) {\n  const errorMsg = response.error || 'No AI response received';\n  console.log(`[W2] ✗ [GENERATOR_ERROR] ${prev.content_id}: ${errorMsg}`);\n  \n  return { json: {\n    ...prev,\n    _conversation_log: conversationLog,\n    _generator_error: true,\n    _error_message: errorMsg,\n    status: 'FAILED',\n    error_code: 'GENERATOR_ERROR',\n    error_message: errorMsg\n  } };\n}\n\n// Clean the caption\nlet caption = (response.response || '').trim();\n\n// Remove common LLM artifacts\ncaption = caption.replace(/```[a-z]*\\n?/gi, '').replace(/```/g, '').trim();\ncaption = caption.replace(/^(L[eé]gende|Caption|Post|Texte)\\s*(Instagram|TikTok|IG|TT)?\\s*:?\\s*/gim, '');\ncaption = caption.replace(/^(Instagram|TikTok|IG|TT)\\s*(L[eé]gende|Caption|Post)?\\s*:?\\s*/gim, '');\ncaption = caption.replace(/^(ACCROCHE|CAPTION|CTA|HOOK)\\s*:?\\s*/gim, '');\ncaption = caption.replace(/^(Here'?s?|Voici|Voilà)\\s*(the|une?|la)?\\s*(caption|légende)?\\s*:?\\s*/gim, '');\n\n// Remove wrapping quotes at start/end only (preserve apostrophes in French words like l'amitie)\ncaption = caption.replace(/^[\\\"\\u201E\\u201C\\u201D''\\u00AB\\u00BB]+|[\\\"\\u201E\\u201C\\u201D''\\u00AB\\u00BB]+$/g, '').trim();\n\n// Remove ALL stray double quotes anywhere in text (keep apostrophes for French)\ncaption = caption.replace(/[\\x22\\u201C\\u201D\\u201E\\u00AB\\u00BB]/g, '');\n\n// Remove smart/curly double quotes inline but KEEP straight apostrophe (') for French\ncaption = caption.replace(/[\\u201E\\u201C\\u201D\\u00AB\\u00BB]/g, '').trim();\n\n// Remove hashtags (they'll be added later)\nconst hashtagsFound = caption.match(/#[\\wÀ-ÿ]+/g) || [];\ncaption = caption.replace(/#[\\wÀ-ÿ]+/g, '').replace(/\\s+/g, ' ').trim();\n\nconsole.log(`[W2] ✓ Generator produced caption (${caption.length} chars, round ${prev._round_number})`);\n\nreturn { json: {\n  ...prev,\n  _conversation_log: conversationLog,\n  _draft_caption: caption,\n  _extracted_hashtags: hashtagsFound,\n  _generator_error: false\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        268,
+        112
+      ],
+      "id": "process-generator-response",
+      "name": "Process Generator Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "generator-error",
+              "leftValue": "={{ $json._generator_error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        508,
+        112
+      ],
+      "id": "generator-error-check",
+      "name": "Generator Error?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Prepare Supervisor Request\n * Builds review prompt for the supervisor agent\n */\nconst item = $json;\nconst config = item._config;\nconst lang = config.client_language || 'fr';\n\nconsole.log(`[W2] ℹ Preparing supervisor review (round ${item._round_number}): ${item.content_id}`);\n\nconst draftCaption = item._draft_caption || '';\nconst imageDescription = item.image_description || 'Non disponible';\n\n// French supervisor prompt\nconst promptFr = `Tu es superviseur qualité pour les réseaux sociaux.\n\nÉVALUE cette légende pour ${config.client_name}:\n\n\"${draftCaption}\"\n\nCONTEXTE:\n- Description image: ${imageDescription}\n- Ton attendu: ${config.brand_voice}\n- Brief: ${config.batch_brief ? config.batch_brief.substring(0, 200) : 'Pas de brief'}\n\nCRITÈRES D'ÉVALUATION:\n1. La légende évoque une ÉMOTION/EXPÉRIENCE (pas une description littérale de l'image)\n2. L'accroche est captivante et engageante\n3. Il y a un appel à l'action subtil\n4. La longueur est appropriée (2-3 lignes max)\n5. Le ton correspond à la marque\n6. La légende se termine par 5-7 hashtags pertinents\n\nRÈGLE CRITIQUE: La légende ne doit JAMAIS décrire littéralement ce qu'on voit dans l'image.\n\nRéponds UNIQUEMENT avec:\n- \"APPROVED\" si tous les critères sont respectés\n- \"REVISION_NEEDED: [explication courte du problème]\" si des corrections sont nécessaires\n\nTa décision:`;\n\n// English supervisor prompt\nconst promptEn = `You are a social media quality supervisor.\n\nEVALUATE this caption for ${config.client_name}:\n\n\"${draftCaption}\"\n\nCONTEXT:\n- Image description: ${imageDescription}\n- Expected tone: ${config.brand_voice}\n- Brief: ${config.batch_brief ? config.batch_brief.substring(0, 200) : 'No brief'}\n\nEVALUATION CRITERIA:\n1. The caption evokes EMOTION/EXPERIENCE (not a literal description of the image)\n2. The hook is catchy and engaging\n3. There's a subtle call to action\n4. The length is appropriate (2-3 lines max)\n5. The tone matches the brand\n6. The caption ends with 5-7 relevant hashtags\n\nCRITICAL RULE: The caption must NEVER literally describe what's visible in the image.\n\nRespond ONLY with:\n- \"APPROVED\" if all criteria are met\n- \"REVISION_NEEDED: [short explanation of the issue]\" if corrections are needed\n\nYour decision:`;\n\nconst prompt = lang === 'en' ? promptEn : promptFr;\n\nconsole.log(`[W2] ✓ Supervisor prompt built (${prompt.length} chars)`);\n\nreturn {\n  json: {\n    ...item,\n    _supervisor_prompt: prompt,\n    _supervisor_start_time: Date.now()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        748,
+        16
+      ],
+      "id": "prepare-supervisor-request",
+      "name": "Prepare Supervisor Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._config.ollama_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json._config.supervisor_model) }},\n  \"prompt\": {{ JSON.stringify($json._supervisor_prompt) }},\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.3,\n    \"num_predict\": 100\n  }\n}",
+        "options": {
+          "timeout": "={{ $json._config.supervisor_timeout || 60000 }}"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        988,
+        16
+      ],
+      "id": "call-supervisor",
+      "name": "Call Caption Supervisor",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Process Supervisor Response\n * Parses supervisor decision and determines next action\n * BUG FIX: Strict regex parsing, proper auto-approve logic\n */\nconst response = $json;\nconst prev = $('Prepare Supervisor Request').first()?.json;\n\nif (!prev || !prev.content_id) {\n  console.log('[W2] ✗ [MISSING_DATA] No data from Prepare Supervisor Request node');\n  return { json: { _error: true, error_code: 'MISSING_DATA', error_message: 'Missing data', status: 'FAILED' } };\n}\n\nconst supervisorDuration = Date.now() - (prev._supervisor_start_time || Date.now());\n\n// Log the supervisor conversation\nconst conversationEntry = {\n  agent_type: 'caption_supervisor',\n  agent_model: prev._config.supervisor_model,\n  round_number: prev._round_number,\n  prompt: prev._supervisor_prompt,\n  response: response.response || response.error || 'No response',\n  duration_ms: supervisorDuration,\n  status: response.error ? 'error' : 'success',\n  error_message: response.error || null\n};\n\nconst conversationLog = [...(prev._conversation_log || []), conversationEntry];\n\n// If supervisor call failed, accept the caption anyway\nif (response.error || !response.response) {\n  console.log(`[W2] ⚠ Supervisor error, accepting caption: ${prev.content_id}`);\n  return { json: {\n    ...prev,\n    _conversation_log: conversationLog,\n    _caption_approved: true,\n    _final_caption: prev._draft_caption,\n    _approval_note: 'Auto-approved due to supervisor error'\n  } };\n}\n\n// BUG FIX #5: Strict regex parsing to avoid matching \"NOT APPROVED\" or mid-text\nconst supervisorResponse = (response.response || '').trim();\nconst isApproved = /^APPROVED\\s*$/i.test(supervisorResponse);\nconst revisionMatch = supervisorResponse.match(/^REVISION_NEEDED:\\s*(.+)/i);\nconst needsRevision = !!revisionMatch;\nconst feedback = revisionMatch ? revisionMatch[1].trim() : '';\n\nconsole.log(`[W2] ℹ Supervisor response: ${supervisorResponse.substring(0, 100)}`);\nconsole.log(`[W2] ℹ Parsed: isApproved=${isApproved}, needsRevision=${needsRevision}`);\n\n// Check if we've hit max rounds\nconst maxRounds = prev._config.max_rounds || 3;\nconst currentRound = prev._round_number || 1;\n\n// BUG FIX #1: Only set _caption_approved: true if isApproved === true\nif (isApproved) {\n  console.log('[W2] ✓ Caption approved by supervisor');\n  return { json: {\n    ...prev,\n    _conversation_log: conversationLog,\n    _caption_approved: true,\n    _final_caption: prev._draft_caption,\n    _approval_note: 'Supervisor approved',\n    _total_rounds: currentRound\n  } };\n}\n\nif (currentRound >= maxRounds) {\n  console.log(`[W2] ⚠ Max rounds (${maxRounds}) reached but NOT approved - needs manual review`);\n  return { json: {\n    ...prev,\n    _conversation_log: conversationLog,\n    _caption_approved: false,\n    _needs_manual_review: true,\n    _final_caption: prev._draft_caption,\n    _approval_note: `Max rounds (${maxRounds}) reached without approval`,\n    _total_rounds: currentRound\n  } };\n}\n\n// Need revision - prepare for next round\nconsole.log(`[W2] ℹ Revision needed (round ${currentRound}): ${feedback}`);\n\nconst revisionHistory = [...(prev._revision_history || []), {\n  round: currentRound,\n  caption: prev._draft_caption,\n  feedback: feedback\n}];\n\nreturn { json: {\n  ...prev,\n  _conversation_log: conversationLog,\n  _caption_approved: false,\n  _revision_feedback: feedback,\n  _revision_history: revisionHistory,\n  _round_number: currentRound + 1\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1228,
+        16
+      ],
+      "id": "process-supervisor-response",
+      "name": "Process Supervisor Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "approved",
+              "leftValue": "={{ $json._caption_approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1468,
+        16
+      ],
+      "id": "caption-approved-check",
+      "name": "Caption Approved?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Update Progress (Revision)\n * Updates progress to show revision round\n */\nconst Database = require('better-sqlite3');\nconst item = $json;\nconst config = item._config;\n\nconsole.log(`[W2] ℹ Preparing revision round ${item._round_number}: ${item.content_id}`);\n\n// Update progress to show revision\nlet db;\ntry {\n  db = new Database(config.db_path);\n  const progress = JSON.stringify({\n    current: item._item_index,\n    total: item._total_items,\n    stage: 'revising',\n    round: item._round_number,\n    content_id: item.content_id\n  });\n\n  db.prepare(`\n    UPDATE batches SET generation_progress = ?\n    WHERE client_id = ? AND slug = ?\n  `).run(progress, config.client_id, config.batch);\n} catch (e) {\n  console.log(`[W2] ⚠ Progress update failed: ${e.message}`);\n} finally {\n  if (db) db.close();\n}\n\nreturn { json: item };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1708,
+        112
+      ],
+      "id": "update-progress-revision",
+      "name": "Update Progress (Revision)"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Log Conversations\n * Saves all conversation rounds to ai_conversations table\n */\nconst Database = require('better-sqlite3');\nconst item = $json;\nconst config = item._config;\n\nconsole.log(`[W2] ℹ Logging ${(item._conversation_log || []).length} conversation entries: ${item.content_id}`);\n\nlet db;\ntry {\n  db = new Database(config.db_path);\n  db.pragma('foreign_keys = ON');\n\n  const insertStmt = db.prepare(`\n    INSERT INTO ai_conversations (\n      content_id, batch_id, session_id, agent_type, agent_model,\n      round_number, role, prompt, response, duration_ms, status, error_message\n    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n  `);\n\n  const insertMany = db.transaction((entries) => {\n    for (const entry of entries) {\n      // Log the prompt (user role)\n      insertStmt.run(\n        item.content_id,\n        config.batch_id,\n        item._session_id,\n        entry.agent_type,\n        entry.agent_model,\n        entry.round_number,\n        'user',\n        entry.prompt,\n        null,\n        null,\n        'success',\n        null\n      );\n      \n      // Log the response (assistant role)\n      insertStmt.run(\n        item.content_id,\n        config.batch_id,\n        item._session_id,\n        entry.agent_type,\n        entry.agent_model,\n        entry.round_number,\n        'assistant',\n        null,\n        entry.response,\n        entry.duration_ms,\n        entry.status,\n        entry.error_message\n      );\n    }\n  });\n\n  insertMany(item._conversation_log || []);\n  console.log('[W2] ✓ Conversations logged to database');\n\n} catch (e) {\n  console.log(`[W2] ⚠ Failed to log conversations: ${e.message}`);\n} finally {\n  if (db) db.close();\n}\n\nreturn { json: item };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1708,
+        -80
+      ],
+      "id": "log-conversations",
+      "name": "Log Conversations"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Finalize Caption\n * Builds final caption with hashtags and prepares for database update\n */\nconst item = $json;\nconst config = item._config;\n\nconsole.log(`[W2] ✓ Finalizing caption: ${item.content_id}`);\n\nconst finalCaption = item._final_caption || item._draft_caption || '';\nconst isTikTok = (item.platforms || '').includes('tt');\n\n// Combine and deduplicate hashtags\nconst baseHashtags = (item.hashtags_final || '').toLowerCase().split(/\\s+/).filter(t => t.startsWith('#'));\nconst extractedHashtags = (item._extracted_hashtags || []).map(t => t.toLowerCase()).filter(t => t.startsWith('#'));\nconst allHashtagsArray = [...baseHashtags, ...extractedHashtags];\nconst allHashtags = [...new Set(allHashtagsArray)].join(' ');\n\n// Build platform-specific captions\nconst captionIg = `${finalCaption}\\n\\n${allHashtags}`.trim();\n\n// TikTok: shorter, fewer hashtags\nconst ttLines = finalCaption.split('\\n').filter(l => l.trim()).slice(0, 3);\nconst ttHashtags = allHashtags.split(' ').slice(0, 5).join(' ');\nconst captionTt = `${ttLines.join('\\n')}\\n\\n${ttHashtags}`.trim();\n\nreturn { json: {\n  id: item.id,\n  content_id: item.content_id,\n  caption_ig: captionIg,\n  caption_tt: captionTt,\n  hashtags_final: allHashtags,\n  status: 'NEEDS_REVIEW',\n  error_message: item._approval_note || null,\n  updated_at: new Date().toISOString(),\n  _total_rounds: item._total_rounds || item._round_number || 1,\n  _db_path: config.db_path,\n  _start_time: config._start_time,\n  _config_base: config._config_base,\n  _config: config\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1948,
+        -80
+      ],
+      "id": "finalize-caption",
+      "name": "Finalize Caption"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "/**\n * W2 v15: Handle Generator Error\n * Handles failed caption generation\n */\nconst item = $json;\nconst config = item._config;\n\nconsole.log(`[W2] ✗ Generator failed: ${item.content_id}`);\n\n// Still log the conversation attempts\nconst Database = require('better-sqlite3');\nlet db;\ntry {\n  db = new Database(config.db_path);\n  db.pragma('foreign_keys = ON');\n\n  const insertStmt = db.prepare(`\n    INSERT INTO ai_conversations (\n      content_id, batch_id, session_id, agent_type, agent_model,\n      round_number, role, prompt, response, duration_ms, status, error_message\n    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n  `);\n\n  for (const entry of (item._conversation_log || [])) {\n    insertStmt.run(\n      item.content_id,\n      config.batch_id,\n      item._session_id,\n      entry.agent_type,\n      entry.agent_model,\n      entry.round_number,\n      'assistant',\n      entry.prompt,\n      entry.response,\n      entry.duration_ms,\n      entry.status,\n      entry.error_message\n    );\n  }\n} catch (e) {\n  console.log(`[W2] ⚠ Failed to log error conversation: ${e.message}`);\n} finally {\n  if (db) db.close();\n}\n\nreturn { json: {\n  id: item.id,\n  content_id: item.content_id,\n  caption_ig: '',\n  caption_tt: '',\n  hashtags_final: item.hashtags_final || '',\n  status: 'FAILED',\n  error_code: item.error_code || 'GENERATOR_ERROR',\n  error_message: item.error_message || item._error_message || 'Caption generation failed',\n  updated_at: new Date().toISOString(),\n  _db_path: config.db_path,\n  _start_time: config._start_time,\n  _config_base: config._config_base,\n  _config: config\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        748,
+        208
+      ],
+      "id": "handle-generator-error",
+      "name": "Handle Generator Error"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2188,
+        16
+      ],
+      "id": "merge-results",
+      "name": "Merge Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W2 v15: Update Database\n * Saves generated captions to SQLite\n */\nconst Database = require('better-sqlite3');\nconst items = $input.all();\n\nif (!items || items.length === 0) return items;\n\nconst dbPath = items[0]?.json?._db_path;\nif (!dbPath) {\n  console.log('[W2] ✗ No database path found in items');\n  return items;\n}\nconsole.log(`[W2] ℹ Updating database: ${dbPath}`);\n\nconst db = new Database(dbPath);\ndb.pragma('foreign_keys = ON');\n\ntry {\n  const updateStmt = db.prepare(`\n    UPDATE content_items SET\n      caption_ig = ?,\n      caption_tt = ?,\n      hashtags_final = ?,\n      status = ?,\n      error_message = ?,\n      caption_generated_at = ?\n    WHERE content_id = ?\n  `);\n\n  const insertAudit = db.prepare(`\n    INSERT INTO audit_log (entity_type, entity_id, action, field_changed, old_value, new_value)\n    VALUES ('content_item', ?, 'caption_generated', 'caption_ig', NULL, ?)\n  `);\n\n  const updateMany = db.transaction((items) => {\n    for (const item of items) {\n      const d = item.json;\n      updateStmt.run(\n        d.caption_ig || null,\n        d.caption_tt || null,\n        d.hashtags_final || null,\n        d.status,\n        d.error_message || null,\n        d.updated_at || new Date().toISOString(),\n        d.content_id\n      );\n      if (d.status === 'NEEDS_REVIEW' && d.caption_ig) {\n        insertAudit.run(d.id, d.caption_ig.substring(0, 200));\n      }\n    }\n  });\n\n  updateMany(items);\n\n  const successCount = items.filter(i => i.json.status === 'NEEDS_REVIEW').length;\n  const failedCount = items.filter(i => i.json.status === 'FAILED').length;\n  console.log(`[W2] ✓ Database updated: ${successCount} success, ${failedCount} failed`);\n\n} finally {\n  db.close();\n}\n\nreturn items.map(item => {\n  const { _db_path, _config, ...clean } = item.json;\n  return { json: { ...clean, _start_time: items[0].json._start_time, _config_base: items[0].json._config_base } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2428,
+        16
+      ],
+      "id": "update-database",
+      "name": "Update Database"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2668,
+        16
+      ],
+      "id": "next-node",
+      "name": "Next"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W2 v15: No Items\n * Handles empty result when no NEEDS_AI items found\n */\nconst fs = require('fs');\nconst input = $input.first().json;\nconst config = input._config || {};\nconst startTime = config._start_time || Date.now();\nconst configBase = config._config_base || '/data/clients/_config';\n\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\nconsole.log('[W2] Summary: No NEEDS_AI items found');\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\n\nconst jobPath = `${configBase}/active_job.json`;\ntry {\n  let jobs = { current: {}, executions: {} };\n  if (fs.existsSync(jobPath)) jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n  if (!jobs.executions) jobs.executions = {};\n  jobs.executions.W2 = {\n    last_run: new Date().toISOString(),\n    status: 'success',\n    client: config.client || null,\n    batch: config.batch || null,\n    duration_ms: Date.now() - startTime,\n    summary: { total: 0, processed: 0, failed: 0 }\n  };\n  fs.writeFileSync(jobPath, JSON.stringify(jobs, null, 2));\n  console.log('[W2] ✓ Job status written to active_job.json');\n} catch (e) {\n  console.log(`[W2] ⚠ Could not write job status: ${e.message}`);\n}\n\nreturn [{ json: {\n  success: true,\n  workflow: 'W2',\n  version: '15',\n  message: 'No NEEDS_AI items to process',\n  client: config.client || 'unknown',\n  batch: config.batch || 'unknown',\n  summary: { total: 0, processed: 0, failed: 0 },\n  database: config.db_path,\n  timestamp: new Date().toISOString()\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -932,
+        304
+      ],
+      "id": "no-items-handler",
+      "name": "No Items"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W2 v15: Summary\n * Generates final report, clears progress, and writes job status\n * BUG FIX #2: Clear generation_progress from database\n */\nconst fs = require('fs');\nconst Database = require('better-sqlite3');\nconst allResults = $input.all();\nconst results = allResults.filter(i => i.json.content_id && i.json.status);\n\nconst config = $('Load Config (YAML)').first().json;\nconst startTime = config._start_time || Date.now();\nconst configBase = config._config_base || '/data/clients/_config';\nconst duration = Date.now() - startTime;\n\nconst processed = results.filter(i => i.json.status === 'NEEDS_REVIEW').length;\nconst failed = results.filter(i => i.json.status === 'FAILED').length;\nconst total = results.length;\n\n// Calculate average rounds\nconst totalRounds = results.reduce((sum, i) => sum + (i.json._total_rounds || 1), 0);\nconst avgRounds = total > 0 ? (totalRounds / total).toFixed(1) : 0;\n\nconst itemErrors = results.filter(i => i.json.status === 'FAILED').map(i => ({\n  content_id: i.json.content_id,\n  code: i.json.error_code || 'UNKNOWN',\n  message: i.json.error_message || 'Unknown error'\n}));\n\nlet overallStatus = 'success';\nif (failed > 0 && processed === 0) overallStatus = 'failed';\nelse if (failed > 0) overallStatus = 'partial';\n\n// BUG FIX #2: Clear generation_progress from database\nlet db;\ntry {\n  db = new Database(config.db_path);\n  db.prepare(`\n    UPDATE batches SET generation_progress = NULL\n    WHERE client_id = ? AND slug = ?\n  `).run(config.client_id, config.batch);\n  console.log('[W2] ✓ Generation progress cleared from database');\n} catch (e) {\n  console.log(`[W2] ⚠ Could not clear progress: ${e.message}`);\n} finally {\n  if (db) db.close();\n}\n\n// Write job status\nconst jobPath = `${configBase}/active_job.json`;\ntry {\n  let jobs = { current: {}, executions: {} };\n  if (fs.existsSync(jobPath)) jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n  if (!jobs.executions) jobs.executions = {};\n  jobs.executions.W2 = {\n    last_run: new Date().toISOString(),\n    status: overallStatus,\n    client: config.client || null,\n    batch: config.batch || null,\n    duration_ms: duration,\n    summary: { total, processed, failed, avg_rounds: avgRounds }\n  };\n  if (itemErrors.length > 0) jobs.executions.W2.errors = itemErrors;\n  fs.writeFileSync(jobPath, JSON.stringify(jobs, null, 2));\n  console.log('[W2] ✓ Job status written to active_job.json');\n} catch (e) {\n  console.log(`[W2] ⚠ Could not write job status: ${e.message}`);\n}\n\nconst report = {\n  success: overallStatus === 'success',\n  workflow: 'W2',\n  version: '15',\n  status: overallStatus,\n  generated_at: new Date().toISOString(),\n  duration_ms: duration,\n  client: config.client || 'unknown',\n  batch: config.batch || 'unknown',\n  source: config.source || 'unknown',\n  models: {\n    generator: config.generator_model,\n    supervisor: config.supervisor_model\n  },\n  summary: {\n    total,\n    processed,\n    failed,\n    success_rate: total > 0 ? ((processed / total) * 100).toFixed(1) + '%' : 'N/A',\n    avg_revision_rounds: avgRounds\n  }\n};\n\nif (itemErrors.length > 0) report.errors = itemErrors;\n\nconst nextSteps = [];\nif (failed > 0) nextSteps.push(`Check ${failed} failed items`);\nif (processed > 0) {\n  nextSteps.push(`Review ${processed} captions in Approval UI`);\n  nextSteps.push('Approve items ready for scheduling');\n  nextSteps.push('Run W3 to schedule approved items');\n}\nif (nextSteps.length > 0) report.next_steps = nextSteps;\n\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\nconsole.log(`[W2] Summary: ${config.client}/${config.batch}`);\nconsole.log('[W2] ───────────────────────────────────────────────────────');\nconsole.log(`[W2] Total: ${total}, Success: ${processed}, Failed: ${failed}`);\nconsole.log(`[W2] Avg revision rounds: ${avgRounds}`);\nconsole.log(`[W2] Status: ${overallStatus.toUpperCase()}`);\nconsole.log(`[W2] Duration: ${(duration / 1000).toFixed(1)}s`);\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\n\nreturn [{ json: report }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2668,
+        208
+      ],
+      "id": "summary-node",
+      "name": "Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W2 v15: Handle Config Error\n * Early exit handler for configuration errors\n */\nconst fs = require('fs');\nconst input = $input.first().json;\nconst startTime = input._start_time || Date.now();\nconst configBase = input._config_base || '/data/clients/_config';\n\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\nconsole.log(`[W2] ✗ Configuration error: ${input.error_code}`);\nconsole.log(`[W2]   ${input.error_message}`);\nconsole.log('[W2] ═══════════════════════════════════════════════════════');\n\nconst jobPath = `${configBase}/active_job.json`;\ntry {\n  let jobs = { current: {}, executions: {} };\n  if (fs.existsSync(jobPath)) jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n  if (!jobs.executions) jobs.executions = {};\n  jobs.executions.W2 = {\n    last_run: new Date().toISOString(),\n    status: 'failed',\n    client: input.client || null,\n    batch: input.batch || null,\n    duration_ms: Date.now() - startTime,\n    error_code: input.error_code,\n    error_message: input.error_message\n  };\n  fs.writeFileSync(jobPath, JSON.stringify(jobs, null, 2));\n  console.log('[W2] ✓ Job status written to active_job.json');\n} catch (e) {\n  console.log(`[W2] ⚠ Could not write job status: ${e.message}`);\n}\n\nreturn [{ json: {\n  success: false,\n  workflow: 'W2',\n  version: '15',\n  status: 'failed',\n  error_code: input.error_code,\n  error_message: input.error_message,\n  client: input.client || null,\n  batch: input.batch || null,\n  timestamp: new Date().toISOString()\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1412,
+        400
+      ],
+      "id": "config-error-handler",
+      "name": "Config Error Handler"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2908,
+        304
+      ],
+      "id": "webhook-response",
+      "name": "Webhook Response"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Config (YAML)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config (YAML)": {
+      "main": [
+        [
+          {
+            "node": "Config Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Error?": {
+      "main": [
+        [
+          {
+            "node": "Config Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get NEEDS_AI Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get NEEDS_AI Items": {
+      "main": [
+        [
+          {
+            "node": "Has Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Items?": {
+      "main": [
+        [
+          {
+            "node": "No Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Initialize Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Generation": {
+      "main": [
+        [
+          {
+            "node": "Process One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One by One": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Progress (Start)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Progress (Start)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Generator Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Generator Request": {
+      "main": [
+        [
+          {
+            "node": "Call Caption Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Caption Generator": {
+      "main": [
+        [
+          {
+            "node": "Process Generator Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Generator Response": {
+      "main": [
+        [
+          {
+            "node": "Generator Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generator Error?": {
+      "main": [
+        [
+          {
+            "node": "Handle Generator Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Supervisor Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Supervisor Request": {
+      "main": [
+        [
+          {
+            "node": "Call Caption Supervisor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Caption Supervisor": {
+      "main": [
+        [
+          {
+            "node": "Process Supervisor Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Supervisor Response": {
+      "main": [
+        [
+          {
+            "node": "Caption Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Caption Approved?": {
+      "main": [
+        [
+          {
+            "node": "Update Progress (Revision)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Conversations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Progress (Revision)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Generator Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Conversations": {
+      "main": [
+        [
+          {
+            "node": "Finalize Caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Caption": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Generator Error": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Update Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Database": {
+      "main": [
+        [
+          {
+            "node": "Next",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next": {
+      "main": [
+        [
+          {
+            "node": "Process One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Items": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "active": true,
+  "meta": {},
+  "tags": []
+}

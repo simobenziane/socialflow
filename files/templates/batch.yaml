@@ -1,0 +1,98 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# BATCH CONFIGURATION - SocialFlow v10
+# ═══════════════════════════════════════════════════════════════════════════════
+# Location: /data/clients/{client}/{batch}/batch.yaml
+# This file defines the batch/project settings, brief, and schedule.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROJECT IDENTITY
+# ─────────────────────────────────────────────────────────────────────────────
+name: "December Feed Content"
+description: "Winter menu promotion and holiday specials"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BRIEF FOR AI (Used for both photos and videos)
+# ─────────────────────────────────────────────────────────────────────────────
+# Keep it short and focused. This is combined with client brand info.
+brief: |
+  Describe the theme/focus for this batch of content.
+  What should the AI highlight?
+  What mood or feeling should the captions evoke?
+  What call-to-action makes sense?
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROJECT HASHTAGS (Added to client hashtags)
+# ─────────────────────────────────────────────────────────────────────────────
+hashtags:
+  - "#winterfood"
+  - "#comfortfood"
+  - "#warmup"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCHEDULING
+# ─────────────────────────────────────────────────────────────────────────────
+schedule:
+  # Start date for scheduling (YYYY-MM-DD format)
+  start_date: "2024-12-09"
+
+  # Strategy options:
+  #   "daily"          - Post every day
+  #   "interval"       - Post every N days
+  #   "weekly"         - Post on specific weekdays
+  #   "specific_dates" - Post on exact dates
+  strategy:
+    type: "interval"
+    interval_days: 2
+    max_per_day: 1
+
+    # For weekly type:
+    # weekdays: [1, 3, 5]  # 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+
+    # For specific_dates type:
+    # dates:
+    #   - "2024-12-09"
+    #   - "2024-12-15"
+
+  # How to order photos and videos:
+  #   "alternate"     - Photo, Video, Photo, Video...
+  #   "photos_first"  - All photos, then all videos
+  #   "videos_first"  - All videos, then all photos
+  #   "mixed"         - Alphabetical by filename
+  distribution:
+    mode: "alternate"
+
+  # Default posting times (HH:MM, 24-hour format)
+  defaults:
+    feed_time: "20:00"
+    story_time: "18:30"
+
+# Default content slot for all items
+slot: "feed"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLATFORM OVERRIDES (Optional - overrides client defaults)
+# ─────────────────────────────────────────────────────────────────────────────
+# Uncomment to override client platform defaults for this batch
+# platforms:
+#   photos:
+#     feed: "ig,tt"
+#   videos:
+#     feed: "ig"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PER-FILE OVERRIDES (Optional)
+# ─────────────────────────────────────────────────────────────────────────────
+# Override settings for specific files
+# overrides:
+#   - file: "special_promo.jpg"
+#     date: "2024-12-25"
+#     time: "10:00"
+#     slot: "story"
+#     platforms: "ig"
+#     caption_override: "Special holiday message!"
+#
+#   - file: "new_year.mp4"
+#     date: "2025-01-01"
+#     time: "00:01"
+#     platforms: "ig,tt"

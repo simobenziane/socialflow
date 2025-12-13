@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Frontend - React SPA via nginx
+  # ===========================================
+  socialflow-ui:
+    build:
+      context: ./socialflow-ui
+      args:
+        - VITE_API_BASE=${VITE_API_BASE:-http://localhost:5678/webhook}
+    container_name: socialflow-ui
+    ports:
+      - "${UI_PORT:-3000}:80"
+    depends_on:
+      - socialflow-n8n
+    networks:
+      - socialflow-network
+    restart: unless-stopped
+
+  # ===========================================
+  # Backend - n8n workflow engine
+  # ===========================================
+  socialflow-n8n:
+    image: n8nio/n8n:latest
+    container_name: socialflow-n8n
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      # n8n configuration
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678}
+      - GENERIC_TIMEZONE=${TZ:-Europe/Berlin}
+
+      # Database (n8n internal)
+      - DB_TYPE=sqlite
+      - DB_SQLITE_DATABASE=/home/node/.n8n/database.sqlite
+
+      # Execution settings
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_ON_PROGRESS=true
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+
+      # Allow local file access for workflows
+      - NODE_FUNCTION_ALLOW_BUILTIN=*
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+    volumes:
+      # n8n internal data (workflows, credentials, executions)
+      - socialflow-n8n-data:/home/node/.n8n
+
+      # SocialFlow data directory (clients, config, database)
+      - ${DATA_PATH:-C:/Clients}:/data/clients
+
+      # Read-only access to workflow files for import reference
+      - ./files/workflows:/opt/workflows:ro
+
+      # Config templates
+      - ./files/config:/opt/config-templates:ro
+
+      # Database scripts
+      - ./files/scripts:/opt/scripts:ro
+    extra_hosts:
+      # Allow container to reach host's Ollama
+      - "host.docker.internal:host-gateway"
+    networks:
+      - socialflow-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# ===========================================
+# Networks
+# ===========================================
+networks:
+  socialflow-network:
+    driver: bridge
+
+# ===========================================
+# Volumes
+# ===========================================
+volumes:
+  socialflow-n8n-data:
+    name: socialflow-n8n-data

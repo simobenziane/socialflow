@@ -1,0 +1,50 @@
+# ===========================================
+# Docker Ignore File
+# ===========================================
+
+# Node modules (rebuilt in container)
+node_modules/
+socialflow-ui/node_modules/
+
+# Build outputs
+socialflow-ui/dist/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files (use .env.example as template)
+.env
+.env.local
+.env.*.local
+
+# Test files (not needed in production)
+*.test.ts
+*.test.tsx
+**/__tests__/
+**/UI-Tests/
+coverage/
+
+# Documentation (not needed in container)
+*.md
+!README.Docker.md
+
+# Claude agent files
+.claude/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp

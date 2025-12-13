@@ -1,0 +1,94 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCHEDULE.YAML - Flexible Scheduling Configuration for SocialFlow v9
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# This file controls how media files are scheduled for posting.
+# Place this file in your batch folder: /data/clients/{client}/{batch}/schedule.yaml
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Start date for scheduling (YYYY-MM-DD format)
+# All posts will be scheduled starting from this date
+start_date: "2024-12-09"
+
+# Timezone for all scheduled times
+# See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+timezone: "Europe/Berlin"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEFAULT POSTING TIMES
+# ─────────────────────────────────────────────────────────────────────────────
+defaults:
+  # Time for feed posts (HH:MM format, 24-hour)
+  feed_time: "20:00"
+
+  # Time for story posts (HH:MM format, 24-hour)
+  story_time: "18:30"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCHEDULING STRATEGY
+# ─────────────────────────────────────────────────────────────────────────────
+strategy:
+  # Strategy type - choose one:
+  #   "daily"          - Post every day
+  #   "interval"       - Post every N days
+  #   "weekly"         - Post on specific weekdays
+  #   "specific_dates" - Post on exact dates
+  type: "interval"
+
+  # For "interval" type: number of days between posts
+  interval_days: 2
+
+  # For "weekly" type: which days to post
+  # 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
+  # Example: [1, 3, 5] = Monday, Wednesday, Friday
+  # weekdays: [1, 3, 5]
+
+  # For "specific_dates" type: list of exact dates
+  # dates:
+  #   - "2024-12-09"
+  #   - "2024-12-15"
+  #   - "2024-12-22"
+
+  # Maximum posts per day
+  max_per_day: 1
+
+  # How to order photos and videos:
+  #   "alternate"     - Photo, Video, Photo, Video...
+  #   "photos_first"  - All photos, then all videos
+  #   "videos_first"  - All videos, then all photos
+  #   "mixed"         - Alphabetical by filename
+  distribution:
+    mode: "alternate"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLATFORM DEFAULTS
+# ─────────────────────────────────────────────────────────────────────────────
+platforms:
+  photos:
+    feed: "ig"           # Instagram only for photos
+    story: "ig"
+  videos:
+    feed: "ig,tt"        # Instagram + TikTok for videos
+    story: "ig"
+
+# Default content slot: "feed" or "story"
+slot: "feed"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PER-FILE OVERRIDES (Optional)
+# ─────────────────────────────────────────────────────────────────────────────
+# Override settings for specific files
+# overrides:
+#   - file: "special_promo.jpg"
+#     date: "2024-12-25"           # Force specific date
+#     time: "10:00"                # Override posting time
+#     slot: "story"                # Override slot
+#     platforms: "ig"              # Override platforms
+#     caption_override: "Special holiday message!"
+#     notes: "Christmas special"   # Notes for AI context
+#
+#   - file: "new_year.mp4"
+#     date: "2025-01-01"
+#     time: "00:01"
+#     platforms: "ig,tt"
