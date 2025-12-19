@@ -29,7 +29,7 @@ GET /api?route=/health
   "message": "API is healthy",
   "data": {
     "status": "healthy",
-    "version": "v15",
+    "version": "v16",
     "database": "connected",
     "storage": "SQLite"
   }
@@ -510,7 +510,7 @@ PUT /api?route=/settings
 
 ## AI Agent Instructions (Phase 3)
 
-The v15 API includes endpoints for managing AI agent instructions at system, client, and batch levels.
+The v16 API includes endpoints for managing AI agent instructions at system, client, and batch levels.
 
 ### Get Agent Settings
 ```
@@ -845,7 +845,7 @@ const { data } = await response.json();
 
 ---
 
-## Frontend API Client Security (v15.1)
+## Frontend API Client Security (v16)
 
 The React frontend API client (`socialflow-ui/src/api/client.ts`) includes built-in security measures:
 

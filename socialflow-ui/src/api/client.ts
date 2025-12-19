@@ -234,6 +234,21 @@ export async function createClient(input: CreateClientInput): Promise<ClientResp
 }
 
 /**
+ * Updates an existing client by slug identifier
+ * @param slug - Unique client slug to update
+ * @param input - Partial client data to update
+ * @returns Promise resolving to updated client data
+ * @throws Error if client not found or API request fails
+ */
+export async function updateClient(
+  slug: string,
+  input: Partial<CreateClientInput>
+): Promise<ClientResponse> {
+  validateSlug(slug);
+  return apiPut<ClientResponse>(`/clients/${encodeRoute(slug)}`, input);
+}
+
+/**
  * Deletes a client by slug identifier
  * @param slug - Unique client slug to delete
  * @returns Promise resolving to success status and message

@@ -20,7 +20,7 @@ import {
 import { useClient, useBatches, useDeleteClient, useArchiveClient, useIngest, useGenerate, useSchedule, useClientInstructions, useUpdateAgentInstruction, useGenerateClientConfig, useIsMounted } from '@/hooks';
 import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner, ErrorAlert, EmptyState, PageHeader } from '@/components/shared';
-import { FolderOpen, ChevronRight, Clock, Globe, MessageSquare, Trash2, Archive, Play, Sparkles, Calendar, Image, Video, Bot, Save, RefreshCw, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { FolderOpen, ChevronRight, Clock, Globe, MessageSquare, Trash2, Archive, Play, Sparkles, Calendar, Image, Video, Bot, Save, RefreshCw, FileText, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
 import type { Batch } from '@/api/types';
 
 export default function ClientDetail() {
@@ -305,6 +305,14 @@ export default function ClientDetail() {
           ]}
         />
         <div className="flex gap-2">
+          {/* Edit Button */}
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/clients/${slug}/edit`}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Link>
+          </Button>
+
           {/* Archive Button */}
           <AlertDialog>
             <AlertDialogTrigger asChild>

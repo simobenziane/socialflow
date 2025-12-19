@@ -10,6 +10,7 @@ const Accounts = lazy(() => import('@/pages/Accounts'));
 const Clients = lazy(() => import('@/pages/Clients'));
 const ClientDetail = lazy(() => import('@/pages/ClientDetail'));
 const CreateClient = lazy(() => import('@/pages/CreateClient'));
+const EditClient = lazy(() => import('@/pages/EditClient'));
 const BatchDetail = lazy(() => import('@/pages/BatchDetail'));
 const ApprovalBoard = lazy(() => import('@/pages/ApprovalBoard'));
 const Settings = lazy(() => import('@/pages/Settings'));
@@ -40,6 +41,7 @@ function App() {
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/clients/new" element={<CreateClient />} />
                 <Route path="/clients/:slug" element={<ClientDetail />} />
+                <Route path="/clients/:slug/edit" element={<EditClient />} />
                 <Route path="/batches/:client/:batch" element={<BatchDetail />} />
                 <Route path="/batches/:client/:batch/approve" element={<ApprovalBoard />} />
                 <Route path="/batches/:client/new" element={<CreateBatch />} />

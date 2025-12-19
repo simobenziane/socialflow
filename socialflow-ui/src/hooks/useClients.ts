@@ -3,6 +3,7 @@ import {
   getClients,
   getClient,
   createClient,
+  updateClient,
   deleteClient,
   deleteAllClients,
   archiveClient,
@@ -37,6 +38,19 @@ export function useCreateClient() {
     mutationFn: (input: CreateClientInput) => createClient(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+    },
+  });
+}
+
+export function useUpdateClient() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ slug, input }: { slug: string; input: Partial<CreateClientInput> }) =>
+      updateClient(slug, input),
+    onSuccess: (_data, { slug }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.detail(slug) });
     },
   });
 }

@@ -162,13 +162,13 @@ docker exec socialflow-n8n sh /opt/scripts/init-db.sh
 1. Open n8n at **http://localhost:5678**
 2. Go to **Workflows** → **Add Workflow** → **Import from File**
 3. Import workflows in this order:
-   - `W_API_Endpoints_v15.2.json` *(required first)*
-   - `W0_Late_Sync_v15.2.json`
-   - `W1_Ingest_Validate_v15.3.json`
-   - `W2_AI_Captions_v15.2.json`
-   - `W3_Late_Scheduling_v15.2.json`
-   - `W_Agent1_Config_v15.2.json` *(optional)*
-   - `W_Agent1_Batch_v15.2.json` *(optional)*
+   - `W_API_Endpoints_v16.json` *(required first)*
+   - `W0_Late_Sync_v16.json`
+   - `W1_Ingest_Validate_v16.json`
+   - `W2_AI_Captions_v16.json`
+   - `W3_Late_Scheduling_v16.json`
+   - `W_Agent1_Config_v16.json` *(optional)*
+   - `W_Agent1_Batch_v16.json` *(optional)*
 4. **Activate** each workflow after import
 
 ### 6. Configure Cloudflare Tunnel (for media serving)
@@ -358,13 +358,13 @@ See [API_REFERENCE.md](docs/API_REFERENCE.md) for full documentation.
 
 | Workflow | Version | Purpose |
 |----------|---------|---------|
-| W-API | v15.2 | REST API router for all endpoints |
-| W0 | v15.2 | Sync Late.com accounts to local cache |
-| W1 | v15.3 | Ingest media, validate, create DB records |
-| W2 | v15.2 | Generate AI captions via Ollama |
-| W3 | v15.2 | Schedule approved content to Late.com |
-| W-Agent1-Config | v15.2 | AI-powered client config generation |
-| W-Agent1-Batch | v15.2 | AI-powered batch brief generation |
+| W-API | v16 | REST API router for all endpoints |
+| W0 | v16 | Sync Late.com accounts to local cache |
+| W1 | v16 | Ingest media, validate, create DB records |
+| W2 | v16 | Generate AI captions via Ollama |
+| W3 | v16 | Schedule approved content to Late.com |
+| W-Agent1-Config | v16 | AI-powered client config generation |
+| W-Agent1-Batch | v16 | AI-powered batch brief generation |
 
 ## Content Status Flow
 
