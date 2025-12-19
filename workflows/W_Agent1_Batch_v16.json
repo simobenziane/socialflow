@@ -1,131 +1,154 @@
 {
-  "name": "W-Agent1: Batch Brief Generator v15.2",
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "w-agent1-batch",
-        "responseMode": "responseNode",
-        "options": {
-          "responseHeaders": {
-            "entries": [
-              {
-                "name": "Access-Control-Allow-Origin",
-                "value": "*"
-              }
-            ]
-          }
-        }
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [0, 300],
-      "id": "agent1b-webhook",
-      "name": "Webhook Trigger",
-      "webhookId": "w-agent1-batch-webhook"
-    },
-    {
-      "parameters": {
-        "jsCode": "/**\n * W-Agent1-Batch v14: Load Config & Build Prompt\n * Builds slim completion-style prompt for batch brief generation\n */\nconst fs = require('fs');\nconst yaml = require('js-yaml');\n\nconsole.log('[Agent1-Batch] ═══════════════════════════════════════════════════════');\nconsole.log('[Agent1-Batch] Starting Batch Brief Generator workflow v14');\nconsole.log('[Agent1-Batch] ═══════════════════════════════════════════════════════');\n\nconst input = $input.first().json || {};\nconst body = input.body || input;\n\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst LOCAL_BASE = '/data/clients';\nconst startTime = Date.now();\n\n// Validate input\nconst clientSlug = body.client;\nconst batchSlug = body.batch;\nconst description = body.description;\n\nif (!clientSlug || !batchSlug) {\n  console.log('[Agent1-Batch] ✗ Missing client or batch');\n  return [{ json: { success: false, error: 'Missing client or batch in request' } }];\n}\n\nif (!description || description.trim().length < 10) {\n  console.log('[Agent1-Batch] ✗ Missing or too short description');\n  return [{ json: { success: false, error: 'Description is required (minimum 10 characters)' } }];\n}\n\nconsole.log(`[Agent1-Batch] ℹ Generating brief for: ${clientSlug}/${batchSlug}`);\n\n// Load settings\nlet settings;\ntry {\n  settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n  console.log('[Agent1-Batch] ✓ settings.json loaded');\n} catch (e) {\n  console.log(`[Agent1-Batch] ✗ Failed to load settings: ${e.message}`);\n  return [{ json: { success: false, error: `Failed to load settings: ${e.message}` } }];\n}\n\n// Load client.yaml for context\nconst clientPath = `${LOCAL_BASE}/${clientSlug}`;\nconst clientYamlPath = `${clientPath}/client.yaml`;\nlet clientConfig = {};\n\ntry {\n  if (fs.existsSync(clientYamlPath)) {\n    clientConfig = yaml.load(fs.readFileSync(clientYamlPath, 'utf8'));\n    console.log(`[Agent1-Batch] ✓ client.yaml loaded: ${clientConfig.name || clientSlug}`);\n  } else {\n    console.log('[Agent1-Batch] ⚠ No client.yaml found, using minimal context');\n  }\n} catch (e) {\n  console.log(`[Agent1-Batch] ⚠ Could not load client.yaml: ${e.message}`);\n}\n\nconst clientName = clientConfig.name || clientSlug;\nconst lang = clientConfig.language || 'fr';\nconst isEnglish = lang === 'en';\n\n// Build optimized prompt with role, constraints, and example\nconst brandVoice = clientConfig.brand?.voice || 'chaleureux et professionnel';\n\nconst promptFr = `Tu es stratège de contenu pour ${clientName}. Ton: ${brandVoice}.\n\nÉcris un brief de campagne (60-80 mots) pour \"${batchSlug}\".\nThème: ${description.substring(0, 120)}\n\nInclure: ton à utiliser, structure des légendes, 2-3 accroches exemples.\n\nExemple de brief:\n\"Ambiance festive et chaleureuse. Légendes: accroche évocatrice, description sensorielle, invitation à l'action. Accroches: 'La magie des fêtes...', 'Partagez un moment...' Pas de prix.\"\n\nBrief:`;\n\nconst promptEn = `You are a content strategist for ${clientName}. Tone: ${brandVoice}.\n\nWrite a campaign brief (60-80 words) for \"${batchSlug}\".\nTheme: ${description.substring(0, 120)}\n\nInclude: tone to use, caption structure, 2-3 example hooks.\n\nExample brief:\n\"Festive and warm atmosphere. Captions: evocative hook, sensory description, call to action. Hooks: 'Holiday magic...', 'Share a moment...' No prices.\"\n\nBrief:`;\n\nconst prompt = isEnglish ? promptEn : promptFr;\n\nconsole.log(`[Agent1-Batch] ✓ Built optimized prompt (${prompt.length} chars, lang: ${lang})`);\n\nconst OLLAMA_URL = settings.ollama?.url_docker || 'http://host.docker.internal:11434/api/generate';\nconst OLLAMA_MODEL = settings.ollama?.models?.config_generator || settings.ollama?.model || 'llama3.2:3b';\nconst OLLAMA_TIMEOUT = settings.ollama?.timeout_ms || 600000;\n\nconsole.log(`[Agent1-Batch] ℹ Using model: ${OLLAMA_MODEL}`);\n\nreturn [{ json: {\n  client: clientSlug,\n  batch: batchSlug,\n  description,\n  prompt,\n  ollama_url: OLLAMA_URL,\n  ollama_model: OLLAMA_MODEL,\n  ollama_timeout: OLLAMA_TIMEOUT,\n  _start_time: startTime\n} }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [240, 300],
-      "id": "agent1b-load-config",
-      "name": "Load Config & Build Prompt"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.ollama_url }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json.ollama_model) }},\n  \"prompt\": {{ JSON.stringify($json.prompt) }},\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.4,\n    \"num_predict\": 200\n  }\n}",
-        "options": {
-          "timeout": "={{ $json.ollama_timeout || 600000 }}"
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.3,
-      "position": [480, 300],
-      "id": "agent1b-call-ollama",
-      "name": "Call Ollama",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "/**\n * W-Agent1-Batch v14: Parse Response\n * Cleans and validates the generated brief\n */\nconst response = $json;\nconst prev = $('Load Config & Build Prompt').item.json;\n\nconsole.log('[Agent1-Batch] ℹ Parsing Ollama response');\n\nif (response.error || !response.response) {\n  const errorMsg = response.error || response.message || 'No response from Ollama';\n  console.log(`[Agent1-Batch] ✗ Ollama error: ${errorMsg}`);\n  return [{ json: {\n    success: false,\n    error: `Ollama error: ${errorMsg}`,\n    client: prev.client,\n    batch: prev.batch\n  } }];\n}\n\nlet brief = (response.response || '').trim();\n\n// Clean up common LLM artifacts\nbrief = brief.replace(/```[a-z]*\\n?/gi, '').replace(/```/g, '').trim();\nbrief = brief.replace(/^(BRIEF|BATCH BRIEF|OUTPUT)\\s*:?\\s*/im, '');\nbrief = brief.replace(/^Here('s| is) (the|your) (batch )?brief[:\\s]*/im, '');\n\n// Remove any leading/trailing quotes\nif ((brief.startsWith('\"') && brief.endsWith('\"')) || (brief.startsWith(\"'\") && brief.endsWith(\"'\"))) {\n  brief = brief.slice(1, -1).trim();\n}\n\n// Validate minimum length\nif (brief.length < 50) {\n  console.log('[Agent1-Batch] ✗ Generated brief too short');\n  return [{ json: {\n    success: false,\n    error: 'Generated brief is too short. Try providing more detail in the description.',\n    client: prev.client,\n    batch: prev.batch\n  } }];\n}\n\nconst elapsed = Date.now() - prev._start_time;\nconsole.log(`[Agent1-Batch] ✓ Brief generated (${brief.length} chars) in ${elapsed}ms`);\n\nreturn [{ json: {\n  success: true,\n  message: 'Batch brief generated successfully',\n  data: {\n    brief: brief,\n    client: prev.client,\n    batch: prev.batch\n  }\n} }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [720, 300],
-      "id": "agent1b-parse-response",
-      "name": "Parse Response"
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [960, 300],
-      "id": "agent1b-respond",
-      "name": "Respond"
-    }
-  ],
-  "connections": {
-    "Webhook Trigger": {
-      "main": [
-        [
-          {
-            "node": "Load Config & Build Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load Config & Build Prompt": {
-      "main": [
-        [
-          {
-            "node": "Call Ollama",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Call Ollama": {
-      "main": [
-        [
-          {
-            "node": "Parse Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Response": {
-      "main": [
-        [
-          {
-            "node": "Respond",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "pinData": {},
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [],
-  "triggerCount": 0
+    "name":  "W-Agent1: Batch Brief Generator v15.2",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "w-agent1-batch",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "*"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       0,
+                                       300
+                                   ],
+                      "id":  "agent1b-webhook",
+                      "name":  "Webhook Trigger",
+                      "webhookId":  "w-agent1-batch-webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "/**\n * W-Agent1-Batch v14: Load Config \u0026 Build Prompt\n * Builds slim completion-style prompt for batch brief generation\n */\nconst fs = require(\u0027fs\u0027);\nconst yaml = require(\u0027js-yaml\u0027);\n\nconsole.log(\u0027[Agent1-Batch] Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â\u0027);\nconsole.log(\u0027[Agent1-Batch] Starting Batch Brief Generator workflow v14\u0027);\nconsole.log(\u0027[Agent1-Batch] Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â\u0027);\n\nconst input = $input.first().json || {};\nconst body = input.body || input;\n\nconst CONFIG_BASE = \u0027/data/clients/_config\u0027;\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst LOCAL_BASE = \u0027/data/clients\u0027;\nconst startTime = Date.now();\n\n// Validate input\nconst clientSlug = body.client;\nconst batchSlug = body.batch;\nconst description = body.description;\n\nif (!clientSlug || !batchSlug) {\n  console.log(\u0027[Agent1-Batch] Ã¢Å“â€” Missing client or batch\u0027);\n  return [{ json: { success: false, error: \u0027Missing client or batch in request\u0027 } }];\n}\n\nif (!description || description.trim().length \u003c 10) {\n  console.log(\u0027[Agent1-Batch] Ã¢Å“â€” Missing or too short description\u0027);\n  return [{ json: { success: false, error: \u0027Description is required (minimum 10 characters)\u0027 } }];\n}\n\nconsole.log(`[Agent1-Batch] Ã¢â€žÂ¹ Generating brief for: ${clientSlug}/${batchSlug}`);\n\n// Load settings\nlet settings;\ntry {\n  settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, \u0027utf8\u0027));\n  console.log(\u0027[Agent1-Batch] Ã¢Å“â€œ settings.json loaded\u0027);\n} catch (e) {\n  console.log(`[Agent1-Batch] Ã¢Å“â€” Failed to load settings: ${e.message}`);\n  return [{ json: { success: false, error: `Failed to load settings: ${e.message}` } }];\n}\n\n// Load client.yaml for context\nconst clientPath = `${LOCAL_BASE}/${clientSlug}`;\nconst clientYamlPath = `${clientPath}/client.yaml`;\nlet clientConfig = {};\n\ntry {\n  if (fs.existsSync(clientYamlPath)) {\n    clientConfig = yaml.load(fs.readFileSync(clientYamlPath, \u0027utf8\u0027));\n    console.log(`[Agent1-Batch] Ã¢Å“â€œ client.yaml loaded: ${clientConfig.name || clientSlug}`);\n  } else {\n    console.log(\u0027[Agent1-Batch] Ã¢Å¡Â  No client.yaml found, using minimal context\u0027);\n  }\n} catch (e) {\n  console.log(`[Agent1-Batch] Ã¢Å¡Â  Could not load client.yaml: ${e.message}`);\n}\n\nconst clientName = clientConfig.name || clientSlug;\nconst lang = clientConfig.language || \u0027fr\u0027;\nconst isEnglish = lang === \u0027en\u0027;\n\n// Build optimized prompt with role, constraints, and example\nconst brandVoice = clientConfig.brand?.voice || \u0027chaleureux et professionnel\u0027;\n\nconst promptFr = `Tu es stratÃƒÂ¨ge de contenu pour ${clientName}. Ton: ${brandVoice}.\n\nÃƒâ€°cris un brief de campagne (60-80 mots) pour \"${batchSlug}\".\nThÃƒÂ¨me: ${description.substring(0, 120)}\n\nInclure: ton ÃƒÂ  utiliser, structure des lÃƒÂ©gendes, 2-3 accroches exemples.\n\nExemple de brief:\n\"Ambiance festive et chaleureuse. LÃƒÂ©gendes: accroche ÃƒÂ©vocatrice, description sensorielle, invitation ÃƒÂ  l\u0027action. Accroches: \u0027La magie des fÃƒÂªtes...\u0027, \u0027Partagez un moment...\u0027 Pas de prix.\"\n\nBrief:`;\n\nconst promptEn = `You are a content strategist for ${clientName}. Tone: ${brandVoice}.\n\nWrite a campaign brief (60-80 words) for \"${batchSlug}\".\nTheme: ${description.substring(0, 120)}\n\nInclude: tone to use, caption structure, 2-3 example hooks.\n\nExample brief:\n\"Festive and warm atmosphere. Captions: evocative hook, sensory description, call to action. Hooks: \u0027Holiday magic...\u0027, \u0027Share a moment...\u0027 No prices.\"\n\nBrief:`;\n\nconst prompt = isEnglish ? promptEn : promptFr;\n\nconsole.log(`[Agent1-Batch] Ã¢Å“â€œ Built optimized prompt (${prompt.length} chars, lang: ${lang})`);\n\nconst OLLAMA_URL = settings.ollama?.url_docker || \u0027http://host.docker.internal:11434/api/generate\u0027;\nconst OLLAMA_MODEL = settings.ollama?.models?.config_generator || settings.ollama?.model || \u0027llama3.2:3b\u0027;\nconst OLLAMA_TIMEOUT = settings.ollama?.timeout_ms || 600000;\n\nconsole.log(`[Agent1-Batch] Ã¢â€žÂ¹ Using model: ${OLLAMA_MODEL}`);\n\nreturn [{ json: {\n  client: clientSlug,\n  batch: batchSlug,\n  description,\n  prompt,\n  ollama_url: OLLAMA_URL,\n  ollama_model: OLLAMA_MODEL,\n  ollama_timeout: OLLAMA_TIMEOUT,\n  _start_time: startTime\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       300
+                                   ],
+                      "id":  "agent1b-load-config",
+                      "name":  "Load Config \u0026 Build Prompt"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "={{ $json.ollama_url }}",
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\n  \"model\": {{ JSON.stringify($json.ollama_model) }},\n  \"prompt\": {{ JSON.stringify($json.prompt) }},\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.4,\n    \"num_predict\": 200\n  }\n}",
+                                         "options":  {
+                                                         "timeout":  "={{ $json.ollama_timeout || 600000 }}"
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.3,
+                      "position":  [
+                                       480,
+                                       300
+                                   ],
+                      "id":  "agent1b-call-ollama",
+                      "name":  "Call Ollama",
+                      "onError":  "continueRegularOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "/**\n * W-Agent1-Batch v14: Parse Response\n * Cleans and validates the generated brief\n */\nconst response = $json;\nconst prev = $(\u0027Load Config \u0026 Build Prompt\u0027).item.json;\n\nconsole.log(\u0027[Agent1-Batch] Ã¢â€žÂ¹ Parsing Ollama response\u0027);\n\nif (response.error || !response.response) {\n  const errorMsg = response.error || response.message || \u0027No response from Ollama\u0027;\n  console.log(`[Agent1-Batch] Ã¢Å“â€” Ollama error: ${errorMsg}`);\n  return [{ json: {\n    success: false,\n    error: `Ollama error: ${errorMsg}`,\n    client: prev.client,\n    batch: prev.batch\n  } }];\n}\n\nlet brief = (response.response || \u0027\u0027).trim();\n\n// Clean up common LLM artifacts\nbrief = brief.replace(/```[a-z]*\\n?/gi, \u0027\u0027).replace(/```/g, \u0027\u0027).trim();\nbrief = brief.replace(/^(BRIEF|BATCH BRIEF|OUTPUT)\\s*:?\\s*/im, \u0027\u0027);\nbrief = brief.replace(/^Here(\u0027s| is) (the|your) (batch )?brief[:\\s]*/im, \u0027\u0027);\n\n// Remove any leading/trailing quotes\nif ((brief.startsWith(\u0027\"\u0027) \u0026\u0026 brief.endsWith(\u0027\"\u0027)) || (brief.startsWith(\"\u0027\") \u0026\u0026 brief.endsWith(\"\u0027\"))) {\n  brief = brief.slice(1, -1).trim();\n}\n\n// Validate minimum length\nif (brief.length \u003c 50) {\n  console.log(\u0027[Agent1-Batch] Ã¢Å“â€” Generated brief too short\u0027);\n  return [{ json: {\n    success: false,\n    error: \u0027Generated brief is too short. Try providing more detail in the description.\u0027,\n    client: prev.client,\n    batch: prev.batch\n  } }];\n}\n\nconst elapsed = Date.now() - prev._start_time;\nconsole.log(`[Agent1-Batch] Ã¢Å“â€œ Brief generated (${brief.length} chars) in ${elapsed}ms`);\n\nreturn [{ json: {\n  success: true,\n  message: \u0027Batch brief generated successfully\u0027,\n  data: {\n    brief: brief,\n    client: prev.client,\n    batch: prev.batch\n  }\n} }];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       720,
+                                       300
+                                   ],
+                      "id":  "agent1b-parse-response",
+                      "name":  "Parse Response"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $json }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       960,
+                                       300
+                                   ],
+                      "id":  "agent1b-respond",
+                      "name":  "Respond"
+                  }
+              ],
+    "connections":  {
+                        "Webhook Trigger":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Load Config \u0026 Build Prompt",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Load Config \u0026 Build Prompt":  {
+                                                                "main":  [
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "Call Ollama",
+                                                                                     "type":  "main",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ]
+                                                                         ]
+                                                            },
+                        "Call Ollama":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Parse Response",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Parse Response":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Respond",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           }
+                    },
+    "pinData":  {
+
+                },
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "staticData":  null,
+    "tags":  [
+
+             ],
+    "triggerCount":  0,
+    "versionId":  "6342cc9f-ebb6-45c1-8933-4aacb01b9975",
+    "active":  false
 }
