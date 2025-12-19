@@ -13,5 +13,4 @@ RUN mkdir -p /data/uploads && chown -R node:node /data/uploads
 # Switch back to node user
 USER node
 
-# Default command
-CMD ["n8n", "start"]
+# Use the default entrypoint/command from the base n8n image
