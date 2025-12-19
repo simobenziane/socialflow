@@ -30,7 +30,7 @@ Quick navigation for SocialFlow documentation.
 
 | Document | Location | Description |
 |----------|----------|-------------|
-| CHANGELOG.md | `../workflows/CHANGELOG.md` | Workflow version history (v15 current) |
+| CHANGELOG.md | `../workflows/CHANGELOG.md` | Workflow version history (v15.4 current) |
 
 ---
 
@@ -62,18 +62,18 @@ POST /w3-schedule - Schedule posts
 
 ---
 
-## Current Version: v15
+## Current Version: v15.4
 
 ### Recent Updates
-- **v15** (2025-12-10): All workflows standardized to v15, Two-Agent Caption System, VLM descriptions
+- **v15.4** (2025-12-12): Content Scheduling Calendar - bulk schedule API, week/month view components
+- **v15.3** (2025-12-12): Batch isolation fix - added batchName to content_id generation
+- **v15.2** (2025-12-11): W1 ingest progress tracking, agent_instructions table
+- **v15** (2025-12-10): Two-Agent Caption System, VLM descriptions
 - **v14.4** (2025-12-08): Final code review - race conditions, cache invalidation, accessibility
-- **v14.3** (2025-12-08): Code review fixes - DB connection safety, URL encoding, memory leaks
-- **v14.2** (2025-12-07): Comprehensive bug fixes (null safety, memory leaks, test suite)
-- **v14.1** (2025-12-07): Language-specific prompts (French/English native support)
 - **v14** (2025-12-07): AI Agent System with instruction cascade
 
 See [CHANGELOG.md](../workflows/CHANGELOG.md) for full version history.
 
 ---
 
-**Last Updated**: 2025-12-12
+**Last Updated**: 2025-12-19

@@ -26,28 +26,30 @@ phase 0/all/
 
 ## Workflows (`workflows/`)
 
-n8n workflow JSON files for import. **All workflows at v15.2:**
+n8n workflow JSON files for import. **Current: v15.4 (W-API), v15.3 (W1), v15.2 (others):**
 
 | File | Description | Webhook |
 |------|-------------|---------|
 | `W0_Late_Sync_v15.2.json` | Syncs Late.com accounts to local cache | `POST /w0-sync` |
-| `W1_Ingest_Validate_v15.2.json` | Ingests media, validates, VLM descriptions, **progress tracking** | `POST /w1-ingest` |
+| `W1_Ingest_Validate_v15.3.json` | Ingests media, validates, VLM descriptions, **progress tracking** | `POST /w1-ingest` |
 | `W2_AI_Captions_v15.2.json` | Two-agent caption generation (Generator + Supervisor) | `POST /w2-captions` |
 | `W3_Late_Scheduling_v15.2.json` | Schedules approved content to Late.com | `POST /w3-schedule` |
-| `W_API_Endpoints_v15.2.json` | REST API router + progress/conversation endpoints | `GET/POST/PUT /api` |
+| `W_API_Endpoints_v15.4.json` | REST API router + scheduling calendar endpoint | `GET/POST/PUT /api` |
 | `W_Agent1_Config_v15.2.json` | Generate client configuration files | `POST /w-agent1-config` |
 | `W_Agent1_Batch_v15.2.json` | Generate batch brief files | `POST /w-agent1-batch` |
 
 ### Import Order
-1. W_API_Endpoints_v15.2.json (API layer - must be first)
+1. W_API_Endpoints_v15.4.json (API layer - must be first)
 2. W0_Late_Sync_v15.2.json
-3. W1_Ingest_Validate_v15.2.json
+3. W1_Ingest_Validate_v15.3.json
 4. W2_AI_Captions_v15.2.json
 5. W3_Late_Scheduling_v15.2.json
 6. W_Agent1_Config_v15.2.json (optional - for AI-assisted client setup)
 7. W_Agent1_Batch_v15.2.json (optional - for AI-assisted batch briefs)
 
 ### Changelog
+- **v15.4** (2025-12-12): Content Scheduling Calendar - bulk schedule API endpoint, week/month view components
+- **v15.3** (2025-12-12): Batch isolation fix - added batchName to content_id generation
 - **v15.2** (2025-12-11): W1 ingest progress tracking, DB schema audit (agent_instructions table), all workflows consolidated
 - **v15.1** (2025-12-10): Deep code review fixes - security (path traversal, XSS, SQL injection), memory leaks, cache invalidation
 - **v15** (2025-12-10): Two-Agent Caption System - VLM image descriptions in W1, Generator+Supervisor loop in W2, conversation logging
@@ -483,4 +485,4 @@ BatchDetail page now has a **"Batch Brief"** tab that allows:
 
 ---
 
-**Last Updated:** 2025-12-12
+**Last Updated:** 2025-12-19

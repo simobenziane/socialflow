@@ -35,6 +35,8 @@ Cloudflare tunnel test              SQLite + File system
 | v13 | 2025-12-06 | Unified versions, JS cleanup, documentation |
 | v14 | 2025-12-07 | Phase 3: AI Agent System, instruction cascade |
 | v15 | 2025-12-10 | Two-Agent Caption System, VLM descriptions, conversation logging |
+| v15.3 | 2025-12-12 | Batch isolation fix (content_id generation) |
+| v15.4 | 2025-12-12 | Content Scheduling Calendar feature |
 
 ---
 
@@ -60,7 +62,7 @@ Cloudflare tunnel test              SQLite + File system
 - Hybrid batch discovery (FS + DB)
 - CORS support
 
-### Phase 3: AI Agent System (Current)
+### Phase 3: AI Agent System
 - All workflows → v15
 - Instruction cascade system (system/client/batch levels)
 - New W-Agent1 workflows for AI-assisted config generation
@@ -68,6 +70,12 @@ Cloudflare tunnel test              SQLite + File system
 - Per-agent model configuration
 - Master prompt files (`_config/agents/*.md`)
 - `agent_instructions` database table
+
+### Phase 4: Scheduling Calendar (Current)
+- Content Scheduling Calendar UI (week/month views)
+- Bulk schedule API endpoint (`POST /batches/:c/:b/schedule`)
+- Smart distribution algorithm (items per day)
+- W-API → v15.4, W1 → v15.3
 
 ### Phase 2.5: Documentation & Cleanup
 - All workflows → v13
@@ -94,17 +102,17 @@ files/
 
 ---
 
-## Workflows (v15)
+## Workflows (v15.2-v15.4)
 
-| Workflow | Purpose | Trigger |
-|----------|---------|---------|
-| W-API | REST API router + Agent APIs | `GET/POST/PUT /api?route=...` |
-| W0 | Sync Late accounts | `POST /w0-sync` |
-| W1 | Ingest media | `POST /w1-ingest` |
-| W2 | AI captions (with cascade) | `POST /w2-captions` |
-| W3 | Schedule posts | `POST /w3-schedule` |
-| W-Agent1-Config | Generate client config | `POST /w-agent1-config` |
-| W-Agent1-Batch | Generate batch briefs | `POST /w-agent1-batch` |
+| Workflow | Version | Purpose | Trigger |
+|----------|---------|---------|---------|
+| W-API | v15.4 | REST API router + scheduling calendar | `GET/POST/PUT /api?route=...` |
+| W0 | v15.2 | Sync Late accounts | `POST /w0-sync` |
+| W1 | v15.3 | Ingest media + VLM descriptions | `POST /w1-ingest` |
+| W2 | v15.2 | AI captions (with cascade) | `POST /w2-captions` |
+| W3 | v15.2 | Schedule posts | `POST /w3-schedule` |
+| W-Agent1-Config | v15.2 | Generate client config | `POST /w-agent1-config` |
+| W-Agent1-Batch | v15.2 | Generate batch briefs | `POST /w-agent1-batch` |
 
 **Import order**: W-API → W0 → W1 → W2 → W3 → W-Agent1-Config → W-Agent1-Batch
 
@@ -295,4 +303,4 @@ Potential future work:
 
 ---
 
-**Last Updated**: 2025-12-10
+**Last Updated**: 2025-12-19

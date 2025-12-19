@@ -55,12 +55,12 @@ This design allows the UI to be swapped, the backend to scale independently, and
 files/
 ├── CLAUDE.md              # This file - AI assistant instructions
 ├── INDEX.md               # Documentation index
-├── workflows/             # n8n workflow JSON files (all v15.2)
+├── workflows/             # n8n workflow JSON files (v15.2-v15.4)
 │   ├── W0_Late_Sync_v15.2.json
-│   ├── W1_Ingest_Validate_v15.2.json
+│   ├── W1_Ingest_Validate_v15.3.json
 │   ├── W2_AI_Captions_v15.2.json
 │   ├── W3_Late_Scheduling_v15.2.json
-│   ├── W_API_Endpoints_v15.2.json
+│   ├── W_API_Endpoints_v15.4.json
 │   ├── W_Agent1_Config_v15.2.json
 │   └── W_Agent1_Batch_v15.2.json
 ├── docs/                  # Documentation
@@ -82,9 +82,9 @@ socialflow-ui/             # React frontend (separate directory)
 
 | Workflow | Version | Description | Webhook |
 |----------|---------|-------------|---------|
-| W-API | v15.2 | REST API router + Agent instruction APIs | `GET/POST/PUT /api?route=...` |
+| W-API | v15.4 | REST API router + scheduling calendar endpoint | `GET/POST/PUT /api?route=...` |
 | W0 | v15.2 | Sync Late.com accounts to cache | `POST /w0-sync` |
-| W1 | v15.2 | Ingest media, validate, create DB records, **progress tracking** | `POST /w1-ingest` |
+| W1 | v15.3 | Ingest media, validate, create DB records, **progress tracking** | `POST /w1-ingest` |
 | W2 | v15.2 | Generate AI captions via Ollama (with instruction cascade) | `POST /w2-captions` |
 | W3 | v15.2 | Schedule approved content to Late.com | `POST /w3-schedule` |
 | W-Agent1-Config | v15.2 | Generate client configuration files | `POST /w-agent1-config` |
@@ -424,5 +424,5 @@ See `.claude/CONVENTIONS.md` for full communication protocols and coding standar
 | Scheduling | `docs/SCHEDULING.md` | Schedule.yaml v9 configuration |
 | Instruction Cascade | `docs/W2_INSTRUCTION_CASCADE.md` | AI instruction cascade (Phase 3) |
 | UI Design Guide | `docs/UI_DESIGN_GUIDE.md` | UI design system, colors, dark mode |
-| Changelog | `workflows/CHANGELOG.md` | Version history (v15.3 current) |
+| Changelog | `workflows/CHANGELOG.md` | Version history (v15.4 current) |
 | Subagent Conventions | `.claude/CONVENTIONS.md` | Development conventions |

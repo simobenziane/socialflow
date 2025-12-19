@@ -23,10 +23,13 @@ Content Scheduling Calendar feature implementation. This release adds a visual s
 ### React Frontend (socialflow-ui)
 
 **New Components (src/components/scheduling/):**
-- `SchedulingCalendar.tsx` - Main calendar component with week/month view toggle
-- `WeekViewScheduler.tsx` - Recurring weekday selector with start date picker
-- `MonthViewScheduler.tsx` - Visual month calendar for selecting specific dates
+- `index.tsx` - Main SchedulingCalendar component with week/month view toggle
+- `WeekView.tsx` - Recurring weekday selector with start date picker
+- `MonthView.tsx` - Visual month calendar for selecting specific dates
 - `SchedulePreview.tsx` - Preview table showing scheduled items before saving
+- `TimeConfig.tsx` - Time configuration for feed/story posts
+- `types.ts` - TypeScript interfaces for scheduling
+- `scheduleUtils.ts` - Date generation and item distribution utilities
 - Full light/dark mode support with consistent theming
 
 **UI Features:**
@@ -53,12 +56,12 @@ Content Scheduling Calendar feature implementation. This release adds a visual s
 - Proper loading states and error handling
 
 **New API Functions (src/api/client.ts):**
-- `updateBatchSchedule(client, batch, items, timezone?)` - Calls bulk schedule endpoint
+- `bulkUpdateSchedule(client, batch, items, timezone?)` - Calls bulk schedule endpoint
 - Input validation for client/batch slugs
 - Timeout: 60 seconds (standard request)
 
-**New Hooks (src/hooks/useBatches.ts):**
-- `useUpdateBatchSchedule(client, batch)` - Mutation hook for schedule updates
+**New Hooks (src/hooks/useScheduleItems.ts):**
+- `useScheduleItems({ clientSlug, batchSlug })` - Mutation hook for schedule updates
 - Invalidates relevant queries on success: batch status, content items
 - Error handling with toast notifications
 
@@ -122,14 +125,17 @@ Content Scheduling Calendar feature implementation. This release adds a visual s
 |------|---------|
 | `W_API_Endpoints_v15.4.json` | Added `/batches/:client/:batch/schedule` route |
 | `docs/API_REFERENCE.md` | Documented bulk schedule endpoint |
-| `src/components/scheduling/SchedulingCalendar.tsx` | New calendar component |
-| `src/components/scheduling/WeekViewScheduler.tsx` | New week view component |
-| `src/components/scheduling/MonthViewScheduler.tsx` | New month view component |
+| `src/components/scheduling/index.tsx` | New SchedulingCalendar component |
+| `src/components/scheduling/WeekView.tsx` | New week view component |
+| `src/components/scheduling/MonthView.tsx` | New month view component |
 | `src/components/scheduling/SchedulePreview.tsx` | New preview component |
+| `src/components/scheduling/TimeConfig.tsx` | New time configuration component |
+| `src/components/scheduling/types.ts` | New scheduling types |
+| `src/components/scheduling/scheduleUtils.ts` | New utility functions |
 | `src/pages/BatchDetail.tsx` | Added scheduling calendar tab |
-| `src/api/client.ts` | Added `updateBatchSchedule` function |
+| `src/api/client.ts` | Added `bulkUpdateSchedule` function |
 | `src/api/types.ts` | Added schedule update types |
-| `src/hooks/useBatches.ts` | Added `useUpdateBatchSchedule` hook |
+| `src/hooks/useScheduleItems.ts` | New hook for schedule mutations |
 
 ---
 
@@ -905,10 +911,10 @@ W{N}_{Name}_v{Version}.json
 
 Current Files:
 - W0_Late_Sync_v15.2.json
-- W1_Ingest_Validate_v15.3.json  ← Updated
+- W1_Ingest_Validate_v15.3.json
 - W2_AI_Captions_v15.2.json
 - W3_Late_Scheduling_v15.2.json
-- W_API_Endpoints_v15.2.json
+- W_API_Endpoints_v15.4.json  ← Updated
 - W_Agent1_Config_v15.2.json
 - W_Agent1_Batch_v15.2.json
 ```
@@ -917,7 +923,7 @@ Current Files:
 
 When setting up a fresh n8n instance:
 
-1. W_API_Endpoints_v15.2.json (API layer)
+1. W_API_Endpoints_v15.4.json (API layer)
 2. W0_Late_Sync_v15.2.json (Account sync)
 3. W1_Ingest_Validate_v15.3.json (Content ingestion)
 4. W2_AI_Captions_v15.2.json (AI processing)
