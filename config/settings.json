@@ -1,0 +1,61 @@
+{
+  "cloudflare_tunnel_url": "https://PASTE-YOUR-TUNNEL-URL.trycloudflare.com",
+
+  "database": {
+    "path": "/data/clients/_config/socialflow.db",
+    "type": "sqlite"
+  },
+
+  "paths": {
+    "docker_base": "/data/clients",
+    "config_path": "/data/clients/_config"
+  },
+
+  "ai_provider": "ollama",
+
+  "gemini": {
+    "api_key": "",
+    "model": "gemini-2.5-flash",
+    "timeout_ms": 60000
+  },
+
+  "ollama": {
+    "url_docker": "http://host.docker.internal:11434/api/generate",
+    "model": "llava:7b",
+    "models": {
+      "config_generator": "llama3.2:3b",
+      "caption_generator": "llama3.2:3b",
+      "caption_supervisor": "llama3.2:3b",
+      "image_describer": "llava:7b"
+    },
+    "timeout_ms": 600000
+  },
+
+  "caption_generation": {
+    "max_revision_rounds": 3,
+    "description_timeout_ms": 60000,
+    "generator_timeout_ms": 120000,
+    "supervisor_timeout_ms": 60000,
+    "vlm_max_retries": 2,
+    "vlm_temperature": 0.5,
+    "vlm_max_tokens": 200
+  },
+
+  "agents": {
+    "config_path": "/data/clients/_config/agents",
+    "enabled": true
+  },
+
+  "defaults": {
+    "timezone": "Europe/Berlin",
+    "language": "fr",
+    "feed_time": "20:00",
+    "story_time": "18:30"
+  },
+
+  "late_api": {
+    "base_url": "https://getlate.dev/api/v1"
+  },
+
+  "version": "15"
+}

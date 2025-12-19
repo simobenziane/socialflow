@@ -65,7 +65,67 @@ ollama pull llava:7b
 ollama pull llama3.2:3b
 ```
 
-## Quick Start (Docker)
+## Interactive Setup
+
+The setup script guides you through configuration with interactive prompts:
+- **Deployment mode**: Local (everything on one machine) or VPS Hybrid (n8n on VPS, Ollama locally via Tailscale)
+- **Data path**: Where to store client media and database
+- **Tailscale IP**: For VPS mode, connects to your local Ollama
+
+The script installs all dependencies, pulls AI models, builds containers, and initializes the database.
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/simobenziane/socialflow.git
+cd socialflow
+.\scripts\setup-windows.ps1
+```
+
+### Mac / Linux
+
+```bash
+git clone https://github.com/simobenziane/socialflow.git
+cd socialflow
+./scripts/setup.sh
+```
+
+### After Setup
+
+```bash
+# Start services (daily)
+make start       # or .\scripts\start-windows.ps1 (Windows)
+
+# Check health
+make health      # or .\scripts\check-health.ps1 (Windows)
+
+# Stop services
+make stop
+```
+
+**That's it!** Open http://localhost:3000 after setup completes.
+
+### VPS Hybrid (Tailscale)
+
+For running on a VPS with Ollama on your local machine:
+```bash
+# On VPS (Ubuntu/Debian)
+git clone https://github.com/simobenziane/socialflow.git
+cd socialflow
+./scripts/setup-vps.sh
+```
+
+The script will:
+1. Ask for your local machine's Tailscale IP
+2. Install Docker, Docker Compose, and Tailscale
+3. Configure the VPS to connect to your local Ollama
+4. Build and start containers
+
+See [docs/VPS_HYBRID.md](docs/VPS_HYBRID.md) for full guide.
+
+---
+
+## Quick Start (Docker) - Manual
 
 ### 1. Clone the Repository
 
@@ -259,7 +319,7 @@ Base URL: `http://localhost:5678/webhook/api?route=`
 | `/w2-captions` | POST | Generate AI captions |
 | `/w3-schedule` | POST | Schedule to Late.com |
 
-See [API_REFERENCE.md](files/docs/API_REFERENCE.md) for full documentation.
+See [API_REFERENCE.md](docs/API_REFERENCE.md) for full documentation.
 
 ## Configuration
 

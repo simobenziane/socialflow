@@ -69,9 +69,9 @@ describe('Sidebar', () => {
   it('should render navigation icons', () => {
     render(<Sidebar />);
 
-    // Should have 4 navigation icons (one for each nav item)
+    // Should have 5 navigation icons (one for each nav item including New Client)
     const icons = document.querySelectorAll('nav svg');
-    expect(icons).toHaveLength(4);
+    expect(icons).toHaveLength(5);
   });
 
   it('should render nav element', () => {

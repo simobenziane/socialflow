@@ -1,0 +1,17 @@
+# Custom n8n image with ffmpeg for video processing
+FROM n8nio/n8n:latest
+
+# Switch to root to install packages
+USER root
+
+# Install ffmpeg for video frame extraction
+RUN apk add --no-cache ffmpeg
+
+# Create uploads directory
+RUN mkdir -p /data/uploads && chown -R node:node /data/uploads
+
+# Switch back to node user
+USER node
+
+# Default command
+CMD ["n8n", "start"]

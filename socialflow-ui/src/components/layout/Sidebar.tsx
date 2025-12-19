@@ -9,6 +9,7 @@ import {
   FolderOpen,
   CheckSquare,
   Workflow,
+  PlusCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
@@ -16,6 +17,7 @@ import { useClient } from '@/hooks';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/onboarding', icon: PlusCircle, label: 'New Client' },
   { to: '/accounts', icon: Users, label: 'Accounts' },
   { to: '/clients', icon: Building2, label: 'Clients' },
   { to: '/settings', icon: Settings, label: 'Settings' },

@@ -88,6 +88,38 @@ export function resetViewport() {
   setViewport(VIEWPORTS.desktop, 768);
 }
 
+// ============================================
+// FILE TESTING UTILITIES
+// ============================================
+
+/**
+ * Create a mock File object for testing file uploads
+ * @param name - File name with extension
+ * @param type - MIME type (e.g., 'image/jpeg', 'video/mp4')
+ * @param size - File size in bytes (default: 1024)
+ */
+export function createMockFile(name: string, type: string, size = 1024): File {
+  const content = new Array(size).fill('a').join('');
+  return new File([content], name, { type });
+}
+
+/**
+ * Create multiple mock files for batch upload testing
+ * @param count - Number of files to create
+ * @param prefix - File name prefix (default: 'photo')
+ * @param type - MIME type (default: 'image/jpeg')
+ */
+export function createMockFiles(
+  count: number,
+  prefix = 'photo',
+  type = 'image/jpeg'
+): File[] {
+  const ext = type.startsWith('image/') ? 'jpg' : 'mp4';
+  return Array.from({ length: count }, (_, i) =>
+    createMockFile(`${prefix}_${i + 1}.${ext}`, type)
+  );
+}
+
 // Re-export everything from testing-library
 export * from '@testing-library/react';
 export { customRender as render };

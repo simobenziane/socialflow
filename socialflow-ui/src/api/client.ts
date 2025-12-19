@@ -30,6 +30,10 @@ import type {
   GenerationProgressResponse,
   IngestProgressResponse,
   AIConversationsResponse,
+  UploadResponse,
+  UploadBatchResponse,
+  OnboardingCompleteInput,
+  OnboardingCompleteResponse,
 } from './types';
 
 // ============================================
@@ -396,7 +400,7 @@ export async function testCloudflareConnection(): Promise<{
 }> {
   // First get the current settings to get the cloudflare URL
   const settings = await getSettings();
-  const cfUrl = settings.data?.cloudflare_tunnel_url || settings.settings?.cloudflare_tunnel_url;
+  const cfUrl = settings.data?.cloudflare_tunnel_url;
 
   if (!cfUrl || !cfUrl.startsWith('https://')) {
     return {
@@ -866,4 +870,154 @@ export async function bulkUpdateSchedule(
     `/batches/${encodeRoute(client, batch)}/schedule`,
     { items: validatedItems, timezone }
   );
+}
+
+// ============================================
+// File Upload (v16)
+// ============================================
+
+/**
+ * Uploads a single file for a client
+ * @param clientId - Client database ID
+ * @param batchId - Optional batch ID (null for temporary batch)
+ * @param file - File to upload
+ * @returns Promise resolving to uploaded file info
+ * @throws Error if upload fails
+ */
+export async function uploadFile(
+  clientId: number,
+  batchId: number | null,
+  file: File
+): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('client_id', String(clientId));
+  if (batchId !== null) {
+    formData.append('batch_id', String(batchId));
+  }
+
+  const { data } = await api.post('/w-upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    timeout: 120000, // 2 minutes for large files
+  });
+
+  if (data.success === false) {
+    throw new Error(data.error || data.message || 'Upload failed');
+  }
+  return data as UploadResponse;
+}
+
+/**
+ * Uploads a single file with retry logic for resilience
+ * @param clientId - Client database ID
+ * @param batchId - Optional batch ID
+ * @param file - File to upload
+ * @param maxRetries - Maximum number of retry attempts (default: 3)
+ * @returns Promise resolving to uploaded file info
+ * @throws Error if all retries fail
+ */
+async function uploadFileWithRetry(
+  clientId: number,
+  batchId: number | null,
+  file: File,
+  maxRetries = 3
+): Promise<UploadResponse> {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await uploadFile(clientId, batchId, file);
+    } catch (error) {
+      lastError = error as Error;
+      // Don't retry for validation errors (4xx responses)
+      if (lastError.message.includes('400') || lastError.message.includes('Invalid file')) {
+        throw lastError;
+      }
+      if (attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+      }
+    }
+  }
+  throw lastError || new Error('Upload failed after retries');
+}
+
+/**
+ * Uploads multiple files for a client
+ * @param clientId - Client database ID
+ * @param batchId - Optional batch ID
+ * @param files - Array of files to upload
+ * @param onProgress - Optional callback for progress updates
+ * @returns Promise resolving to batch upload result
+ * @throws Error if upload fails
+ */
+export async function uploadFiles(
+  clientId: number,
+  batchId: number | null,
+  files: File[],
+  onProgress?: (uploaded: number, total: number) => void
+): Promise<UploadBatchResponse> {
+  const results: UploadResponse[] = [];
+  let successful = 0;
+  let failed = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    try {
+      // Use retry logic for resilience against network issues
+      const result = await uploadFileWithRetry(clientId, batchId, files[i]);
+      results.push(result);
+      successful++;
+    } catch {
+      failed++;
+    }
+    if (onProgress) {
+      onProgress(i + 1, files.length);
+    }
+  }
+
+  return {
+    success: failed === 0,
+    message: `Uploaded ${successful} of ${files.length} files`,
+    data: {
+      files: results.map(r => r.data.file),
+      successful,
+      failed,
+    },
+  };
+}
+
+/**
+ * Completes the onboarding process - converts uploads to content items
+ * @param input - Onboarding completion data
+ * @returns Promise resolving to created content info
+ * @throws Error if onboarding completion fails
+ */
+export async function completeOnboarding(
+  input: OnboardingCompleteInput
+): Promise<OnboardingCompleteResponse> {
+  const { data } = await api.post('/w-onboarding-complete', input, {
+    timeout: 180000, // 3 minutes for processing
+  });
+
+  if (data.success === false) {
+    throw new Error(data.error || data.message || 'Onboarding completion failed');
+  }
+  return data as OnboardingCompleteResponse;
+}
+
+/**
+ * Creates a new batch for a client
+ * @param clientId - Client database ID
+ * @param name - Batch name
+ * @param description - Optional batch description
+ * @returns Promise resolving to created batch info
+ * @throws Error if batch creation fails
+ */
+export async function createBatch(
+  clientId: number,
+  name: string,
+  description?: string
+): Promise<{ success: boolean; data: { batch_id: number; slug: string } }> {
+  return apiPost('/batches', { client_id: clientId, name, description });
 }

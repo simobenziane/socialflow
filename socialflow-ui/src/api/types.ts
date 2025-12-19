@@ -8,6 +8,7 @@ export interface AccountLink {
 }
 
 export interface Client {
+  id: number;
   slug: string;
   name: string;
   type: string;
@@ -93,7 +94,7 @@ export interface AccountsResponse {
 // ============================================
 
 export type BatchStatus = 'draft' | 'ready' | 'processing' | 'reviewing' | 'scheduled';
-export type BatchSource = 'filesystem' | 'database';
+export type BatchSource = 'folder' | 'upload';
 
 export interface Batch {
   name: string;
@@ -197,10 +198,10 @@ export interface ContentItem {
   description_generated_at?: string;
 
   // Captions
-  caption_ig: string;
-  caption_tt: string;
+  caption_ig?: string;
+  caption_tt?: string;
   caption_override?: string;
-  hashtags_final: string;
+  hashtags_final?: string;
 
   // Status
   status: ContentStatus;
@@ -606,6 +607,73 @@ export interface IngestProgressResponse {
     progress: IngestProgress | null;
     started_at: string | null;
     is_running: boolean;
+  };
+}
+
+// ============================================
+// File Upload Types (v16)
+// ============================================
+
+export type FileStatus = 'uploaded' | 'processing' | 'ready' | 'error';
+
+export interface UploadedFile {
+  id: number;
+  client_id: number;
+  batch_id: number | null;
+  original_name: string;
+  storage_path: string;
+  uuid: string;
+  file_size: number | null;
+  mime_type: string | null;
+  checksum: string | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  frame_paths: string | null;
+  frame_count: number;
+  status: FileStatus;
+  error_message: string | null;
+  content_item_id: number | null;
+  uploaded_at: string;
+  processed_at: string | null;
+}
+
+export interface UploadResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    file: UploadedFile;
+  };
+}
+
+export interface UploadBatchResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    files: UploadedFile[];
+    successful: number;
+    failed: number;
+  };
+}
+
+export interface OnboardingCompleteInput {
+  client_id: number;
+  batch_id: number;
+  batch_name: string;
+  batch_description?: string;
+  brief?: string;
+  start_date: string;
+  schedule_strategy: 'daily' | 'weekdays' | 'custom';
+}
+
+export interface OnboardingCompleteResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    client_slug: string;
+    batch_slug: string;
+    file_count: number;
+    content_items_created: number;
   };
 }
 

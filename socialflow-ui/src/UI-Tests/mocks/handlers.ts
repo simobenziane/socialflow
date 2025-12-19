@@ -321,6 +321,60 @@ export const mockBulkApproveResponse = {
 };
 
 // ============================================
+// ONBOARDING MOCK RESPONSES
+// ============================================
+
+export const mockCreatedClient = {
+  id: 99,
+  slug: 'test-restaurant',
+  name: 'Test Restaurant',
+  type: 'restaurant',
+  language: 'en',
+  timezone: 'America/New_York',
+  is_active: true,
+  business_description: 'A cozy restaurant serving authentic cuisine',
+  target_audience: 'Food lovers and families',
+  brand_personality: 'Warm, welcoming, authentic',
+  accounts: {},
+  schedule: {},
+};
+
+export const mockCreatedBatch = {
+  id: 1,
+  client_id: 99,
+  slug: 'january-content',
+  name: 'January Content',
+  description: 'Winter campaign content',
+  source_type: 'upload' as const,
+  status: 'draft' as const,
+};
+
+export const mockUploadedFile = {
+  id: 1,
+  uuid: 'abc123-def456-ghi789',
+  client_id: 99,
+  batch_id: 1,
+  original_name: 'photo1.jpg',
+  storage_path: '/data/uploads/99/1/abc123.jpg',
+  file_size: 1024000,
+  mime_type: 'image/jpeg',
+  status: 'ready' as const,
+};
+
+export const mockOnboardingComplete = {
+  client_slug: 'test-restaurant',
+  batch_slug: 'january-content',
+  file_count: 3,
+  content_items_created: 3,
+};
+
+export const mockGeneratedConfig = {
+  client_slug: 'test-restaurant',
+  config_path: '/data/clients/test-restaurant/_config/',
+  files_created: ['config.yaml', 'brief.md'],
+};
+
+// ============================================
 // ERROR MOCK RESPONSES FOR TESTING
 // ============================================
 
@@ -656,7 +710,40 @@ export const handlers = [
     }
 
     if (route === '/clients') {
-      return HttpResponse.json(mockClientResponse);
+      return HttpResponse.json({
+        success: true,
+        message: 'Client created',
+        data: mockCreatedClient,
+      });
+    }
+    if (route === '/batches') {
+      return HttpResponse.json({
+        success: true,
+        message: 'Batch created',
+        data: mockCreatedBatch,
+      });
+    }
+    if (route === '/w-upload') {
+      return HttpResponse.json({
+        success: true,
+        data: {
+          file: mockUploadedFile,
+        },
+      });
+    }
+    if (route === '/w-onboarding-complete') {
+      return HttpResponse.json({
+        success: true,
+        data: mockOnboardingComplete,
+      });
+    }
+    if (route === '/w-agent1-config') {
+      return HttpResponse.json({
+        success: true,
+        data: {
+          config: mockGeneratedConfig,
+        },
+      });
     }
     if (route === '/late/sync') {
       return HttpResponse.json({ ...mockWorkflowResponse, workflow: 'W0-Sync' });

@@ -1,17 +1,23 @@
+# docker-compose.vps.yml
+# VPS Hybrid Setup - n8n on VPS, Ollama on local machine via Tailscale
+#
+# Usage: docker-compose -f docker-compose.vps.yml up -d
+
 version: '3.8'
 
 services:
   # ===========================================
   # Frontend - React SPA via nginx
+  # Binds to localhost only (nginx proxy handles external)
   # ===========================================
   socialflow-ui:
     build:
       context: ./socialflow-ui
       args:
-        - VITE_API_BASE=${VITE_API_BASE:-http://localhost:5678/webhook}
+        - VITE_API_BASE=${VITE_API_BASE:-https://your-domain.com/webhook}
     container_name: socialflow-ui
     ports:
-      - "${UI_PORT:-3000}:80"
+      - "127.0.0.1:${UI_PORT:-3000}:80"  # Localhost only - nginx proxy
     depends_on:
       - socialflow-n8n
     networks:
@@ -20,6 +26,7 @@ services:
 
   # ===========================================
   # Backend - n8n workflow engine with ffmpeg
+  # Binds to localhost only (nginx proxy handles external)
   # ===========================================
   socialflow-n8n:
     build:
@@ -27,14 +34,18 @@ services:
       dockerfile: docker/n8n.Dockerfile
     container_name: socialflow-n8n
     ports:
-      - "${N8N_PORT:-5678}:5678"
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"  # Localhost only - nginx proxy
     environment:
       # n8n configuration
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
-      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
-      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678}
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
+      - WEBHOOK_URL=${WEBHOOK_URL:-https://your-domain.com}
       - GENERIC_TIMEZONE=${TZ:-Europe/Berlin}
+
+      # Ollama via Tailscale - set OLLAMA_HOST in .env
+      # Example: OLLAMA_HOST=http://100.100.100.2:11434
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://100.x.x.x:11434}
 
       # Database (n8n internal)
       - DB_TYPE=sqlite
@@ -50,28 +61,24 @@ services:
       - NODE_FUNCTION_ALLOW_BUILTIN=*
       - NODE_FUNCTION_ALLOW_EXTERNAL=*
     volumes:
-      # n8n internal data (workflows, credentials, executions)
+      # n8n internal data
       - socialflow-n8n-data:/home/node/.n8n
 
-      # SocialFlow data directory (clients, config, database)
-      # Windows: set DATA_PATH=C:/Clients in .env
-      # Mac/Linux: set DATA_PATH=./data or ~/socialflow-data in .env
-      - ${DATA_PATH:-./data}:/data/clients
+      # SocialFlow data directory
+      - ${DATA_PATH:-/opt/socialflow-data}:/data/clients
 
       # Uploads directory for file-based onboarding (v16)
-      - ${DATA_PATH:-./data}/uploads:/data/uploads
+      - ${DATA_PATH:-/opt/socialflow-data}/uploads:/data/uploads
 
-      # Read-only access to workflow files for import reference
+      # Workflow files (new paths)
       - ./workflows:/opt/workflows:ro
 
-      # Config templates
+      # Config templates (new path)
       - ./config:/opt/config-templates:ro
 
-      # Database scripts
+      # Database scripts (new path)
       - ./scripts:/opt/scripts:ro
-    extra_hosts:
-      # Allow container to reach host's Ollama
-      - "host.docker.internal:host-gateway"
+    # NO extra_hosts - Ollama is accessed via Tailscale network
     networks:
       - socialflow-network
     restart: unless-stopped
@@ -82,16 +89,10 @@ services:
       retries: 3
       start_period: 30s
 
-# ===========================================
-# Networks
-# ===========================================
 networks:
   socialflow-network:
     driver: bridge
 
-# ===========================================
-# Volumes
-# ===========================================
 volumes:
   socialflow-n8n-data:
     name: socialflow-n8n-data
