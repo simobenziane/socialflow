@@ -52,7 +52,9 @@ services:
       - socialflow-n8n-data:/home/node/.n8n
 
       # SocialFlow data directory (clients, config, database)
-      - ${DATA_PATH:-C:/Clients}:/data/clients
+      # Windows: set DATA_PATH=C:/Clients in .env
+      # Mac/Linux: set DATA_PATH=./data or ~/socialflow-data in .env
+      - ${DATA_PATH:-./data}:/data/clients
 
       # Read-only access to workflow files for import reference
       - ./files/workflows:/opt/workflows:ro

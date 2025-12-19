@@ -1,0 +1,22 @@
+# docker-compose.mac.yml
+# Mac-specific optimizations for better performance
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.mac.yml up -d
+
+version: '3.8'
+
+services:
+  socialflow-n8n:
+    volumes:
+      # Use cached mode for better Mac performance
+      - ${DATA_PATH:-./data}:/data/clients:cached
+      - ./files/workflows:/opt/workflows:ro,cached
+      - ./files/config:/opt/config-templates:ro,cached
+      - ./files/scripts:/opt/scripts:ro,cached
+    # Increase shared memory for better performance
+    shm_size: '256mb'
+
+  socialflow-ui:
+    volumes:
+      # Cached volumes for development
+      - ./socialflow-ui:/app:cached
+      - /app/node_modules
