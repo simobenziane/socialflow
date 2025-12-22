@@ -9,6 +9,25 @@ SocialFlow automates the entire social media content pipeline: ingest media, gen
 ![n8n](https://img.shields.io/badge/n8n-v1.x-orange.svg)
 ![React](https://img.shields.io/badge/react-19-61dafb.svg)
 
+## Quick Links
+
+| Document | Description |
+|----------|-------------|
+| [Setup Guide](docs/SETUP.md) | Installation & configuration |
+| [Mac Deployment](docs/MAC_DEPLOYMENT.md) | Mac setup with auto-update |
+| [VPS Hybrid](docs/VPS_HYBRID.md) | Deploy n8n on VPS, Ollama locally |
+| [API Reference](docs/API_REFERENCE.md) | REST API endpoints |
+| [Workflows](docs/WORKFLOWS.md) | n8n workflow documentation |
+| [Scheduling](docs/SCHEDULING.md) | Content scheduling guide |
+
+**Quick Commands:**
+```bash
+make setup    # Initial setup
+make start    # Start services
+make update   # Pull from GitHub & rebuild
+make health   # Check service status
+```
+
 ## Features
 
 - **AI-Powered Captions** - Generate social media captions using local LLMs (Ollama) with vision models
