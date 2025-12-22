@@ -1,50 +1,70 @@
 # SocialFlow Workflow Changelog
 
+## Version 16.2 (2025-12-20)
+
+### Overview
+Bug fixes for guided onboarding. File upload feature deferred to future version.
+
+### Fixes
+
+**W-API: Delete All Clients**
+- Fixed: "Delete All" button now works correctly
+- Added `DELETE /clients` endpoint (was only `DELETE /clients/:slug`)
+- Cascades deletion to accounts, batches, and content items
+
+**W-API: Account Username Lookup**
+- Fixed: Social media handles now display correctly for clients after onboarding
+- Added `lookupAccountUsername()` helper function
+- When linking accounts during client creation, username is now looked up from `late_accounts.json` cache
+- Fixed variable scope issue (`let` instead of `const` for igUsername/ttUsername)
+
+**W-Agent1: LLM Prompt Improvements**
+- Fixed: AI-generated briefs no longer include conversational preamble
+- Updated prompts to explicitly instruct "RESPOND ONLY WITH..." format
+- Improved cleanup regex to catch more preamble patterns:
+  - French: "Bonjour", "Je suis ravi", "Voici", etc.
+  - English: "Here is", "I'm happy to", "Sure", etc.
+- Lowered temperature from 0.4 to 0.3 for more consistent output
+
+### Deferred Features
+The following features planned for v16 have been deferred to a future release:
+- **File Upload Infrastructure**: W_Upload workflow, multipart uploads, ffmpeg frame extraction
+- **Upload-based Batches**: `source_type='upload'` batches that read from `files` table
+- The database schema changes (files table, source_type, file_id) remain in place for future use
+
+Current onboarding continues to use folder-based batch creation.
+
+---
+
+## Version 16.1 (2025-12-19)
+
+### Overview
+Video AI caption settings. Added per-client and per-batch control for AI caption generation on videos.
+
+---
+
 ## Version 16 (2025-12-19)
 
 ### Overview
-Upload-based client onboarding. This release adds a guided onboarding wizard that allows users to upload media files directly instead of requiring folder-based batch setup.
+Guided client onboarding wizard. This release adds a 4-step onboarding wizard for creating clients with AI-generated brand configuration.
 
 ### Database Schema (v16)
-**New Table: `files`**
+**New Table: `files`** (prepared for future upload feature)
 - Tracks uploaded files for upload-based onboarding
 - Fields: id, client_id, batch_id, original_name, storage_path, uuid, file_size, mime_type, checksum, width, height, duration_seconds, frame_paths, frame_count, status, error_message, content_item_id, uploaded_at, processed_at
 
 **Modified Tables:**
 - `batches`: Added `source_type TEXT DEFAULT 'folder'` ('folder' or 'upload')
 - `content_items`: Added `file_id INTEGER` (FK to files table)
+- `clients`: Added `video_ai_captions INTEGER DEFAULT 0`
+- `batches`: Added `video_ai_captions INTEGER DEFAULT NULL`
 
 ### W-API: Endpoints v16
 **New Routes:**
-- `POST /batches` - Create new batch for upload-based onboarding
+- `POST /batches` - Create new batch
   - Input: `{ client_id, name, description?, source_type? }`
   - Auto-generates slug from name
-  - Sets `source_type='upload'` by default
   - Returns: `{ batch_id, slug, client_slug }`
-- `GET /files/:batch_id` - List uploaded files for a batch
-  - Returns all files for the given batch ordered by upload time
-
-### W_Upload v16 (Planned)
-**New Workflow - To Be Implemented in n8n UI:**
-- Webhook: POST `/w-upload` (multipart/form-data)
-- Handles file uploads from frontend
-- Saves to `/data/uploads/{client_id}/{batch_id}/{uuid}.ext`
-- Extracts video frames using ffmpeg (4 frames per video)
-- Updates files table with status
-
-### W_Onboarding_Complete v16 (Planned)
-**New Workflow - To Be Implemented in n8n UI:**
-- Webhook: POST `/w-onboarding-complete`
-- Finalizes upload-based onboarding
-- Validates all files are ready
-- Creates content_items linked to files
-- Updates batch status to 'ready'
-
-### W1: Ingest & Validate v16 (Planned Enhancement)
-**Planned Changes:**
-- Added `source_type` support for upload vs folder batches
-- Upload batches query files table instead of scanning filesystem
-- Backward compatible with existing folder-based batches
 
 ### React Frontend (socialflow-ui)
 **New Components:**

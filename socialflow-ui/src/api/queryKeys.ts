@@ -38,9 +38,15 @@ export const queryKeys = {
     detail: (id: string | number) => ['content-items', 'detail', id] as const,
   },
 
-  // Accounts
+  // Accounts (synced from Late.com)
   accounts: {
     all: ['accounts'] as const,
+  },
+
+  // Scheduled Posts (v16.5)
+  posts: {
+    all: ['posts'] as const,
+    scheduled: (slug: string) => ['posts', 'scheduled', slug] as const,
   },
 
   // Settings

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress, CircularProgress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { GlassPanel } from '@/components/ui/glass-panel';
 import { StatusDot, type ContentStatus } from '@/components/ui/status-indicator';
@@ -13,6 +14,13 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from '@/components/ui/collapsible';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useBatchStatus, useIngest, useGenerate, useSchedule, useResetBatch, useClient, useContentItems, useGenerationProgress, useIngestProgress, useBatchInstructions, useUpdateAgentInstruction, useIsMounted, useScheduleItems } from '@/hooks';
+import { useBatchStatus, useIngest, useGenerate, useSchedule, useResetBatch, useClient, useContentItems, useGenerationProgress, useIngestProgress, useBatchInstructions, useUpdateAgentInstruction, useIsMounted, useScheduleItems, useUpdateBatch, useBatches } from '@/hooks';
 import { LoadingSpinner, ErrorAlert, PageHeader } from '@/components/shared';
 import { SchedulingCalendar } from '@/components/scheduling';
 import { useToast } from '@/hooks/use-toast';
@@ -50,6 +58,9 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
+  Settings,
+  Clock,
+  Smartphone,
 } from 'lucide-react';
 
 type WorkflowStage = 'idle' | 'ingesting' | 'ingest_complete' | 'generating' | 'generate_complete' | 'scheduling' | 'schedule_complete';
@@ -85,11 +96,162 @@ export default function BatchDetail() {
   const generate = useGenerate();
   const schedule = useSchedule();
   const resetBatch = useResetBatch();
+  const updateBatch = useUpdateBatch();
+  const batchesData = useBatches(client);
   const { toast } = useToast();
 
   const [workflowStage, setWorkflowStage] = useState<WorkflowStage>('idle');
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // AI Caption settings state (v16.1, v17.6)
+  const currentBatch = batchesData.data?.data?.batches?.find(b => b.slug === batch);
+  const [videoAiSetting, setVideoAiSetting] = useState<'inherit' | 'enabled' | 'disabled'>('inherit');
+  const [photoAiSetting, setPhotoAiSetting] = useState<'inherit' | 'enabled' | 'disabled'>('inherit');
+
+  // Schedule time settings (v17.8) - Format-specific posting times
+  const [photoTime, setPhotoTime] = useState('19:00');
+  const [videoTime, setVideoTime] = useState('20:00');
+  const [storyTime, setStoryTime] = useState('12:00');
+
+  // Initialize AI settings and schedule times from batch data
+  useEffect(() => {
+    if (currentBatch) {
+      // Video AI
+      if (currentBatch.video_ai_captions === true) {
+        setVideoAiSetting('enabled');
+      } else if (currentBatch.video_ai_captions === false) {
+        setVideoAiSetting('disabled');
+      } else {
+        setVideoAiSetting('inherit');
+      }
+      // Photo AI
+      if (currentBatch.photo_ai_captions === true) {
+        setPhotoAiSetting('enabled');
+      } else if (currentBatch.photo_ai_captions === false) {
+        setPhotoAiSetting('disabled');
+      } else {
+        setPhotoAiSetting('inherit');
+      }
+      // Schedule times (v17.8)
+      if (currentBatch.schedule_config) {
+        try {
+          const config = typeof currentBatch.schedule_config === 'string'
+            ? JSON.parse(currentBatch.schedule_config)
+            : currentBatch.schedule_config;
+          setPhotoTime(config.photo_time || config.feed_time || '19:00');
+          setVideoTime(config.video_time || config.feed_time || '20:00');
+          setStoryTime(config.story_time || '12:00');
+        } catch {
+          // Keep defaults if parsing fails
+        }
+      }
+    }
+  }, [currentBatch]);
+
+  // Handler for video AI setting change
+  const handleVideoAiSettingChange = async (value: 'inherit' | 'enabled' | 'disabled') => {
+    const previousValue = videoAiSetting;
+    setVideoAiSetting(value);
+    const apiValue = value === 'inherit' ? null : value === 'enabled';
+    try {
+      await updateBatch.mutateAsync({
+        client,
+        batch,
+        updates: { video_ai_captions: apiValue }
+      });
+      toast({
+        title: 'Settings updated',
+        description: 'Video AI caption setting has been saved.',
+      });
+    } catch {
+      // Rollback to previous value on error
+      setVideoAiSetting(previousValue);
+      toast({
+        title: 'Error',
+        description: 'Failed to save video AI setting.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handler for photo AI setting change
+  const handlePhotoAiSettingChange = async (value: 'inherit' | 'enabled' | 'disabled') => {
+    const previousValue = photoAiSetting;
+    setPhotoAiSetting(value);
+    const apiValue = value === 'inherit' ? null : value === 'enabled';
+    try {
+      await updateBatch.mutateAsync({
+        client,
+        batch,
+        updates: { photo_ai_captions: apiValue }
+      });
+      toast({
+        title: 'Settings updated',
+        description: 'Photo AI caption setting has been saved.',
+      });
+    } catch {
+      // Rollback to previous value on error
+      setPhotoAiSetting(previousValue);
+      toast({
+        title: 'Error',
+        description: 'Failed to save photo AI setting.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handler for schedule time changes (v17.8)
+  const handleScheduleTimeChange = async (
+    timeType: 'photo' | 'video' | 'story',
+    value: string
+  ) => {
+    // Update local state immediately
+    if (timeType === 'photo') setPhotoTime(value);
+    else if (timeType === 'video') setVideoTime(value);
+    else if (timeType === 'story') setStoryTime(value);
+
+    // Build schedule config
+    const newConfig = {
+      photo_time: timeType === 'photo' ? value : photoTime,
+      video_time: timeType === 'video' ? value : videoTime,
+      story_time: timeType === 'story' ? value : storyTime,
+      // Keep legacy feed_time for backwards compatibility
+      feed_time: timeType === 'photo' ? value : photoTime,
+    };
+
+    try {
+      await updateBatch.mutateAsync({
+        client,
+        batch,
+        updates: { schedule_config: JSON.stringify(newConfig) }
+      });
+      toast({
+        title: 'Schedule updated',
+        description: `${timeType.charAt(0).toUpperCase() + timeType.slice(1)} posting time saved.`,
+      });
+    } catch {
+      // Rollback on error
+      if (currentBatch?.schedule_config) {
+        try {
+          const config = typeof currentBatch.schedule_config === 'string'
+            ? JSON.parse(currentBatch.schedule_config)
+            : currentBatch.schedule_config;
+          setPhotoTime(config.photo_time || config.feed_time || '19:00');
+          setVideoTime(config.video_time || config.feed_time || '20:00');
+          setStoryTime(config.story_time || '12:00');
+        } catch {
+          // Keep current values if rollback fails
+        }
+      }
+      toast({
+        title: 'Error',
+        description: 'Failed to save schedule time.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   // AI Instructions state
   const batchInstructions = useBatchInstructions(client, batch);
@@ -836,6 +998,143 @@ export default function BatchDetail() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Batch Settings - Collapsible (v16.1) */}
+      <Collapsible open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+        <Card>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Settings className="h-5 w-5 text-slate-500" />
+                  <div>
+                    <CardTitle className="text-base">Batch Settings</CardTitle>
+                    <CardDescription>
+                      {(videoAiSetting === 'inherit' && photoAiSetting === 'inherit') ? 'Using client defaults' : 'Custom settings applied'}
+                    </CardDescription>
+                  </div>
+                </div>
+                {isSettingsOpen ? (
+                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4 pt-0">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    <Image className="h-4 w-4 text-muted-foreground" />
+                    Photo AI Captions
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Override whether AI generates captions for photos in this batch.
+                  </p>
+                </div>
+                <Select
+                  value={photoAiSetting}
+                  onValueChange={handlePhotoAiSettingChange}
+                  disabled={updateBatch.isPending}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select setting" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inherit">Inherit from Client</SelectItem>
+                    <SelectItem value="enabled">Generate AI Captions</SelectItem>
+                    <SelectItem value="disabled">Manual Captions Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    <Video className="h-4 w-4 text-muted-foreground" />
+                    Video AI Captions
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Override whether AI generates captions for videos in this batch.
+                  </p>
+                </div>
+                <Select
+                  value={videoAiSetting}
+                  onValueChange={handleVideoAiSettingChange}
+                  disabled={updateBatch.isPending}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Select setting" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inherit">Inherit from Client</SelectItem>
+                    <SelectItem value="enabled">Generate AI Captions</SelectItem>
+                    <SelectItem value="disabled">Manual Captions Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Schedule Times (v17.8) - Format-specific posting times */}
+              <div className="pt-4 border-t">
+                <div className="mb-3">
+                  <Label className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    Schedule Times
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Set default posting times for each content format.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="photo-time" className="text-xs flex items-center gap-1.5">
+                      <Image className="h-3.5 w-3.5" />
+                      Photo Posts
+                    </Label>
+                    <Input
+                      id="photo-time"
+                      type="time"
+                      value={photoTime}
+                      onChange={(e) => handleScheduleTimeChange('photo', e.target.value)}
+                      disabled={updateBatch.isPending}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="video-time" className="text-xs flex items-center gap-1.5">
+                      <Video className="h-3.5 w-3.5" />
+                      Video/Reels
+                    </Label>
+                    <Input
+                      id="video-time"
+                      type="time"
+                      value={videoTime}
+                      onChange={(e) => handleScheduleTimeChange('video', e.target.value)}
+                      disabled={updateBatch.isPending}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="story-time" className="text-xs flex items-center gap-1.5">
+                      <Smartphone className="h-3.5 w-3.5" />
+                      Stories
+                    </Label>
+                    <Input
+                      id="story-time"
+                      type="time"
+                      value={storyTime}
+                      onChange={(e) => handleScheduleTimeChange('story', e.target.value)}
+                      disabled={updateBatch.isPending}
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </CollapsibleContent>
         </Card>

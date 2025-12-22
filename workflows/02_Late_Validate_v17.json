@@ -1,0 +1,126 @@
+{
+  "name": "02_Late_Validate_v17",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "late-validate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "late-validate-webhook",
+      "name": "Webhook",
+      "webhookId": "late-validate"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://getlate.dev/api/v1/profiles",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.body.api_key }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        240,
+        0
+      ],
+      "id": "call-late-api",
+      "name": "Call Late API",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst apiKey = $('Webhook').first().json.body?.api_key || '';\n\nconst statusCode = response.statusCode || 200;\n\nif (statusCode === 401 || statusCode === 403) {\n return [{ json: { success: false, error: 'Invalid API key', error_code: 'INVALID_KEY' } }];\n}\n\nif (statusCode >= 400) {\n return [{ json: { success: false, error: `Late API error: ${statusCode}`, error_code: 'API_ERROR' } }];\n}\n\nconst body = response.body || response;\nconst profiles = body.profiles || [];\n\nreturn [{ json: { success: true, profiles_count: profiles.length, api_key: apiKey } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "process-response",
+      "name": "Process Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        0
+      ],
+      "id": "respond",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Call Late API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Late API": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true,
+  "versionId": "96a668f3-fcb4-4cb8-8c76-136662bf1415",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "tags": []
+}

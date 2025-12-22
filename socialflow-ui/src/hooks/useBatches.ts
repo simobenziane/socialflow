@@ -8,6 +8,8 @@ import {
   getGenerationProgress,
   getIngestProgress,
   resetBatch,
+  updateBatch,
+  type UpdateBatchInput,
 } from '@/api/client';
 import { queryKeys } from '@/api/queryKeys';
 import { useVisibility } from './useVisibility';
@@ -142,6 +144,24 @@ export function useResetBatch() {
         },
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
+    },
+  });
+}
+
+/**
+ * Hook for updating batch settings (v16.1)
+ * Used for video_ai_captions override and other batch-level settings
+ */
+export function useUpdateBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ client, batch, updates }: { client: string; batch: string; updates: UpdateBatchInput }) =>
+      updateBatch(client, batch, updates),
+    onSuccess: (_, { client, batch }) => {
+      // Invalidate batches to refresh data
+      queryClient.invalidateQueries({ queryKey: queryKeys.batches.byClient(client) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.batches.status(client, batch) });
     },
   });
 }

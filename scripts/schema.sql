@@ -1,9 +1,15 @@
 -- ═══════════════════════════════════════════════════════════════════════════════
--- SOCIALFLOW v16 DATABASE SCHEMA
+-- SOCIALFLOW v17 DATABASE SCHEMA
 -- SQLite Database for local content management
+--
+-- Version History:
 -- v12: Added image_description, ai_conversations table, generation_progress
 -- v15: Added batch_status composite index for performance
 -- v16: Added files table for upload-based onboarding, source_type for batches
+-- v16.1: Added video_ai_captions setting to clients and batches
+-- v16.4: Added late_profile_id for profile-based account linking
+-- v16.9: Added late_config table for secure API key storage
+-- v17: Workflow reorganization, numbered prefixes, bug fixes consolidated
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 -- Enable foreign keys
@@ -20,7 +26,11 @@ CREATE TABLE IF NOT EXISTS clients (
     type TEXT DEFAULT 'business',  -- 'restaurant', 'cafe', 'bar', 'retail', 'other'
     is_active INTEGER DEFAULT 1,
     language TEXT DEFAULT 'fr',
-    timezone TEXT DEFAULT 'Europe/Berlin',
+    timezone TEXT DEFAULT 'Europe/Paris',
+
+    -- Posting Schedule
+    feed_time TEXT DEFAULT '20:00',
+    story_time TEXT DEFAULT '18:30',
 
     -- Brand info
     brand_voice TEXT,
@@ -39,6 +49,12 @@ CREATE TABLE IF NOT EXISTS clients (
     -- AI Generation (Phase 3)
     onboarding_data TEXT,  -- JSON: original form responses from onboarding
     ai_generated INTEGER DEFAULT 0,  -- 1 if config files were AI-generated
+
+    -- Video AI Settings (v16.1)
+    video_ai_captions INTEGER DEFAULT 0,  -- 0 = skip AI (manual captions), 1 = generate AI captions for videos
+
+    -- Late.com Profile Linking (v16.4)
+    late_profile_id TEXT,  -- Links to Late.com profile ID; all accounts under this profile belong to this client
 
     -- Timestamps
     created_at TEXT DEFAULT (datetime('now')),
@@ -103,6 +119,9 @@ CREATE TABLE IF NOT EXISTS batches (
 
     -- AI Generation (Phase 3)
     ai_generated_brief INTEGER DEFAULT 0,  -- 1 if brief was AI-generated
+
+    -- Video AI Settings (v16.1)
+    video_ai_captions INTEGER DEFAULT NULL,  -- NULL = inherit from client, 0 = skip, 1 = generate
 
     -- Generation Progress (v12)
     generation_progress TEXT,  -- JSON: {current: 5, total: 20, stage: 'generating', round: 2}
@@ -320,6 +339,20 @@ CREATE TABLE IF NOT EXISTS files (
 );
 
 -- ═══════════════════════════════════════════════════════════════════════════════
+-- LATE CONFIG TABLE (v16.9)
+-- Stores Late.com API configuration (single row table)
+-- API key is stored securely - never returned to frontend after save
+-- ═══════════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS late_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),  -- Enforce single row
+    api_key TEXT NOT NULL,                   -- Late.com API key
+    plan_name TEXT,                          -- User's Late.com plan
+    connected_at TEXT,                       -- When API key was first saved
+    synced_at TEXT,                          -- Last successful sync timestamp
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ═══════════════════════════════════════════════════════════════════════════════
 -- INDEXES
 -- Performance optimization for common queries
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -334,6 +367,7 @@ CREATE INDEX IF NOT EXISTS idx_content_items_content_id ON content_items(content
 -- Accounts indexes
 CREATE INDEX IF NOT EXISTS idx_accounts_client ON accounts(client_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_platform ON accounts(client_id, platform);
+CREATE INDEX IF NOT EXISTS idx_accounts_late_account_id ON accounts(late_account_id);
 
 -- Clients indexes
 CREATE INDEX IF NOT EXISTS idx_clients_slug ON clients(slug);

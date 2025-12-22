@@ -4,6 +4,7 @@ import {
   rejectItem,
   updateItemCaption,
   approveBatchItems,
+  updateItemPlatforms,
 } from '@/api/client';
 import { queryKeys } from '@/api/queryKeys';
 import type { ContentItemsResponse, ContentItem } from '@/api/types';
@@ -202,6 +203,56 @@ export function useApproveBatchItems() {
           return Array.isArray(key) && key[0] === 'batches' && key[3] === 'status';
         },
       });
+    },
+  });
+}
+
+/**
+ * Hook for updating item platforms (IG/TT) - v17.8
+ * Used for per-item platform selection via toggleable badges
+ */
+export function useUpdateItemPlatforms() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      platforms,
+    }: {
+      id: string | number;
+      platforms: 'ig' | 'tt' | 'ig,tt';
+    }) => updateItemPlatforms(id, platforms),
+    retry: 1,
+    retryDelay: 1000,
+    onMutate: async ({ id, platforms }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: queryKeys.contentItems.all });
+
+      // Snapshot the previous value
+      const previousData = queryClient.getQueriesData<ContentItemsResponse>({
+        queryKey: queryKeys.contentItems.all,
+      });
+
+      // Optimistically update the platforms
+      updateItemInCache(queryClient, id, (item) => ({
+        ...item,
+        platforms,
+      }));
+
+      return { previousData };
+    },
+    onError: (err, _vars, context) => {
+      // Log error and rollback
+      console.error('[useUpdateItemPlatforms] Failed:', err);
+      if (context?.previousData) {
+        context.previousData.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data);
+        });
+      }
+    },
+    onSettled: () => {
+      // Invalidate to ensure consistency with server state
+      queryClient.invalidateQueries({ queryKey: queryKeys.contentItems.all });
     },
   });
 }

@@ -1,5 +1,6 @@
 export * from './useClients';
 export * from './useAccounts';
+export * from './usePosts';
 export * from './useBatches';
 export * from './useSettings';
 export * from './useStats';
@@ -10,4 +11,3 @@ export * from './useVisibility';
 export * from './useAgents';
 export * from './useIsMounted';
 export * from './useScheduleItems';
-export * from './useUploads';

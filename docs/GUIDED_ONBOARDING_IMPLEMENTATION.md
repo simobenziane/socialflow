@@ -1,5 +1,21 @@
 # Guided Client Onboarding - Implementation Plan
 
+> **STATUS: PARTIALLY IMPLEMENTED in v16**
+>
+> v16 implements the 4-step onboarding wizard with folder-based file storage.
+> The file upload infrastructure (Steps 3-4 in this doc) is **deferred to v17+**.
+>
+> **What's Implemented in v16:**
+> - Step 1: Client Info (fully working)
+> - Step 2: Account Selection (fully working)
+> - Step 3: Upload Media (UI exists, but uses folder-based storage, not database uploads)
+> - Step 4: Generate (triggers existing W1/W2 workflows)
+>
+> **Deferred to v17+:**
+> - Database-based file storage (`files` table)
+> - W-Upload workflow
+> - Automatic frame extraction
+
 ## Overview
 
 A step-by-step wizard that guides users through client setup and content upload. Everything is stored in the **database on the VPS** - no manual folder creation needed.

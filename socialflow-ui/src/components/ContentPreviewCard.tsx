@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusIndicator, type ContentStatus } from '@/components/ui/status-indicator';
 import type { ContentItem } from '@/api/types';
-import { Check, X, Edit2, ExternalLink, MessageSquare } from 'lucide-react';
+import { Check, X, Edit2, ExternalLink, MessageSquare, Video } from 'lucide-react';
 import { getLatePostUrl } from '@/config/constants';
 import { getVideoCoverUrl } from '@/lib/media';
 import { AIConversationViewer } from './AIConversationViewer';
 import { cn } from '@/lib/utils';
+import { useUpdateItemPlatforms } from '@/hooks';
 
 interface ContentPreviewCardProps {
   item: ContentItem;
@@ -53,8 +54,38 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
   const mediaLabel = item.media_type === 'photo' ? 'Photo' : 'Video';
   const slotLabel = item.slot === 'feed' ? 'Feed' : 'Story';
 
-  // Bug fix: Handle null/undefined platforms with fallback to empty string
-  const platforms = (item.platforms || '').split(',').filter(p => p.trim());
+  // Platform toggle mutation (v17.8)
+  const updatePlatformsMutation = useUpdateItemPlatforms();
+
+  // Parse platforms - normalize 'instagram'/'tiktok' to 'ig'/'tt'
+  const rawPlatforms = (item.platforms || 'ig').split(',').map(p => {
+    const normalized = p.trim().toLowerCase();
+    if (normalized === 'instagram' || normalized === 'ig') return 'ig';
+    if (normalized === 'tiktok' || normalized === 'tt') return 'tt';
+    return normalized;
+  }).filter(p => p === 'ig' || p === 'tt');
+
+  // Ensure at least one platform
+  const platforms = rawPlatforms.length > 0 ? rawPlatforms : ['ig'];
+  const hasIG = platforms.includes('ig');
+  const hasTT = platforms.includes('tt');
+
+  // Toggle platform selection
+  const togglePlatform = useCallback((platform: 'ig' | 'tt') => {
+    const current = new Set(platforms);
+    // Don't allow removing the last platform
+    if (current.has(platform) && current.size > 1) {
+      current.delete(platform);
+    } else if (!current.has(platform)) {
+      current.add(platform);
+    }
+    const newPlatforms = Array.from(current).sort().join(',') as 'ig' | 'tt' | 'ig,tt';
+    // Use id or content_id as fallback
+    const itemId = item.id ?? item.content_id;
+    if (itemId) {
+      updatePlatformsMutation.mutate({ id: itemId, platforms: newPlatforms });
+    }
+  }, [platforms, item.id, item.content_id, updatePlatformsMutation]);
 
   // Use shared utility for video cover URL resolution
   const previewUrl = getVideoCoverUrl(item);
@@ -145,10 +176,23 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
         </div>
 
         {/* Slot Badge - Bottom Left */}
-        <div className="absolute bottom-3 left-3">
+        <div className="absolute bottom-3 left-3 flex gap-1.5 flex-wrap">
           <Badge variant="secondary" className="bg-black/60 text-white border-0 backdrop-blur-sm">
             {slotLabel}
           </Badge>
+          {/* Video: Manual Caption indicator */}
+          {item.media_type === 'video' && (
+            <Badge variant="secondary" className="bg-amber-600/90 text-white border-0 backdrop-blur-sm">
+              <Video className="h-3 w-3 mr-1" />
+              Manual
+            </Badge>
+          )}
+          {/* Story: No Caption Needed indicator */}
+          {item.slot === 'story' && (
+            <Badge variant="secondary" className="bg-purple-600/90 text-white border-0 backdrop-blur-sm">
+              No Caption
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -166,19 +210,41 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
             {formatDate(item.schedule_at)}
           </span>
         </div>
-        {platforms.length > 0 && (
-          <div className="flex gap-1 flex-wrap mt-1">
-            {platforms.map((platform) => (
-              <Badge
-                key={platform}
-                variant={platform.trim() === 'instagram' ? 'instagram' : 'tiktok'}
-                className="text-[10px] px-1.5 py-0"
-              >
-                {platform.trim() === 'instagram' ? 'IG' : 'TT'}
-              </Badge>
-            ))}
-          </div>
-        )}
+        {/* Platform toggles (v17.8) - Click to enable/disable platforms */}
+        <div className="flex gap-1.5 mt-1.5">
+          <button
+            type="button"
+            onClick={() => togglePlatform('ig')}
+            disabled={disabled || updatePlatformsMutation.isPending}
+            className={cn(
+              'px-2 py-0.5 rounded text-xs font-medium transition-all duration-150',
+              'focus:outline-none focus:ring-2 focus:ring-offset-1',
+              hasIG
+                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm focus:ring-pink-400'
+                : 'bg-muted text-muted-foreground hover:bg-pink-100 dark:hover:bg-pink-900/30 focus:ring-muted',
+              (disabled || updatePlatformsMutation.isPending) && 'opacity-50 cursor-not-allowed'
+            )}
+            title={hasIG ? 'Click to disable Instagram' : 'Click to enable Instagram'}
+          >
+            IG {hasIG && '✓'}
+          </button>
+          <button
+            type="button"
+            onClick={() => togglePlatform('tt')}
+            disabled={disabled || updatePlatformsMutation.isPending}
+            className={cn(
+              'px-2 py-0.5 rounded text-xs font-medium transition-all duration-150',
+              'focus:outline-none focus:ring-2 focus:ring-offset-1',
+              hasTT
+                ? 'bg-black text-white shadow-sm focus:ring-gray-400 dark:bg-white dark:text-black'
+                : 'bg-muted text-muted-foreground hover:bg-gray-200 dark:hover:bg-gray-700 focus:ring-muted',
+              (disabled || updatePlatformsMutation.isPending) && 'opacity-50 cursor-not-allowed'
+            )}
+            title={hasTT ? 'Click to disable TikTok' : 'Click to enable TikTok'}
+          >
+            TT {hasTT && '✓'}
+          </button>
+        </div>
       </CardHeader>
 
       {/* Caption - Full display with scroll */}
@@ -201,7 +267,15 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
         ) : (
           <div className="min-h-[60px] max-h-[120px] overflow-y-auto">
             <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="caption-display">
-              {item.caption_ig || <em className="text-muted-foreground/60">No caption</em>}
+              {item.caption_ig || (
+                <em className="text-muted-foreground/60">
+                  {item.slot === 'story'
+                    ? 'No caption needed for stories'
+                    : item.media_type === 'video'
+                      ? 'Add caption manually for videos'
+                      : 'No caption'}
+                </em>
+              )}
             </p>
           </div>
         )}

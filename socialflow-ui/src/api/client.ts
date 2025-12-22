@@ -5,6 +5,7 @@ import type {
   ClientResponse,
   CreateClientInput,
   AccountsResponse,
+  ScheduledPostsResponse,
   BatchesResponse,
   BatchStatusResponse,
   SettingsResponse,
@@ -34,6 +35,8 @@ import type {
   UploadBatchResponse,
   OnboardingCompleteInput,
   OnboardingCompleteResponse,
+  // Late Config types (v16.10)
+  LateSyncResponse,
 } from './types';
 
 // ============================================
@@ -269,6 +272,24 @@ export async function deleteAllClients(): Promise<{ success: boolean; message: s
 }
 
 // ============================================
+// Late Config (v16.10)
+// ============================================
+
+/**
+ * Syncs profiles and accounts from Late.com via W0 webhook
+ * Uses the axios client which has the correct VITE_API_BASE configured
+ * @returns Promise resolving to sync result with counts
+ * @throws Error if sync times out or fails
+ */
+export async function syncLate(): Promise<LateSyncResponse> {
+  // Use axios client with 2 minute timeout for long-running sync
+  const response = await api.post<LateSyncResponse>('/w0-sync', {}, {
+    timeout: API_TIMEOUTS.WORKFLOW // 120000ms = 2 minutes
+  });
+  return response.data;
+}
+
+// ============================================
 // Late Accounts
 // ============================================
 
@@ -282,14 +303,40 @@ export async function getAccounts(): Promise<AccountsResponse> {
 }
 
 /**
- * Triggers W0 workflow to sync Late.com accounts to local cache
- * @returns Promise resolving to workflow execution response
- * @throws Error if workflow trigger fails
+ * Triggers sync of Late.com accounts to local cache
+ * Calls W0 webhook directly with timeout handling
+ * @returns Promise resolving to sync result
+ * @throws Error if sync fails or times out
  */
-export async function syncAccounts(): Promise<WorkflowResponse> {
-  // Direct webhook call to W0 workflow
-  const { data } = await api.post('/w0-sync', {});
-  return validateWorkflowResponse(data, 'Account sync workflow failed');
+export async function syncAccounts(): Promise<LateSyncResponse> {
+  // Use syncLate() which has proper timeout handling
+  return syncLate();
+}
+
+// ============================================
+// Scheduled Posts (v16.5)
+// ============================================
+
+/**
+ * Gets cached scheduled posts for a client from Late.com
+ */
+export async function getScheduledPosts(slug: string): Promise<ScheduledPostsResponse> {
+  validateSlug(slug);
+  return apiGet<ScheduledPostsResponse>(`/clients/${encodeRoute(slug)}/posts`);
+}
+
+/**
+ * Syncs scheduled posts from Late.com for a specific client
+ * This fetches fresh data from Late API and caches it
+ */
+export async function syncScheduledPosts(slug: string): Promise<WorkflowResponse> {
+  validateSlug(slug);
+  const { data } = await api.post(
+    `/w4-posts-sync?slug=${encodeRoute(slug)}`,
+    {},
+    { timeout: API_TIMEOUTS.WORKFLOW }
+  );
+  return validateWorkflowResponse(data, 'Posts sync workflow failed');
 }
 
 // ============================================
@@ -384,6 +431,34 @@ export async function resetBatch(
   );
 }
 
+/**
+ * Updates batch settings (v16.1)
+ * @param client - Client slug identifier
+ * @param batch - Batch slug identifier
+ * @param updates - Partial batch settings to update
+ * @returns Promise resolving to updated batch
+ */
+export interface UpdateBatchInput {
+  video_ai_captions?: boolean | null;  // null = inherit from client
+  photo_ai_captions?: boolean | null;  // null = inherit from client
+  brief?: string;
+  description?: string;
+  schedule_config?: string;  // JSON string with photo_time, video_time, story_time (v17.8)
+}
+
+export async function updateBatch(
+  client: string,
+  batch: string,
+  updates: UpdateBatchInput
+): Promise<{ success: boolean; message: string; data: unknown }> {
+  validateSlug(client);
+  validateSlug(batch);
+  return apiPut<{ success: boolean; message: string; data: unknown }>(
+    `/batches/${encodeRoute(client, batch)}`,
+    updates
+  );
+}
+
 // ============================================
 // Settings
 // ============================================
@@ -407,20 +482,24 @@ export async function updateSettings(updates: Partial<Settings>): Promise<{ succ
   return apiPut('/settings', updates);
 }
 
-export async function testCloudflareConnection(): Promise<{
+/**
+ * Test a Cloudflare tunnel URL for connectivity.
+ * Can be used to test any URL (e.g., form input before saving).
+ *
+ * @param cfUrl - The Cloudflare tunnel URL to test
+ * @returns Promise with success status and message
+ */
+export async function testCloudflareUrl(cfUrl: string): Promise<{
   success: boolean;
   message: string;
   url?: string;
   status_code?: number;
 }> {
-  // First get the current settings to get the cloudflare URL
-  const settings = await getSettings();
-  const cfUrl = settings.data?.cloudflare_tunnel_url;
-
+  // Validate URL
   if (!cfUrl || !cfUrl.startsWith('https://')) {
     return {
       success: false,
-      message: 'No valid Cloudflare URL configured',
+      message: 'URL must start with https://',
       url: cfUrl,
     };
   }
@@ -465,6 +544,15 @@ export async function testCloudflareConnection(): Promise<{
       };
     }
   } catch (err) {
+    // Check for abort (timeout)
+    if (err instanceof Error && err.name === 'AbortError') {
+      return {
+        success: false,
+        message: 'Connection timed out - tunnel may be offline',
+        url: cfUrl,
+      };
+    }
+
     // CORS error or network error - try fallback with no-cors
     const message = err instanceof Error ? err.message : 'Connection failed';
 
@@ -491,7 +579,15 @@ export async function testCloudflareConnection(): Promise<{
         message: 'Tunnel is reachable (CORS restricted)',
         url: cfUrl,
       };
-    } catch {
+    } catch (fallbackErr) {
+      // Check if fallback also timed out
+      if (fallbackErr instanceof Error && fallbackErr.name === 'AbortError') {
+        return {
+          success: false,
+          message: 'Connection timed out - tunnel may be offline',
+          url: cfUrl,
+        };
+      }
       return {
         success: false,
         message: `Cannot reach tunnel: ${message}`,
@@ -507,6 +603,31 @@ export async function testCloudflareConnection(): Promise<{
       clearTimeout(timeoutId);
     }
   }
+}
+
+/**
+ * Test the saved Cloudflare tunnel URL for connectivity.
+ * Fetches URL from saved settings first.
+ */
+export async function testCloudflareConnection(): Promise<{
+  success: boolean;
+  message: string;
+  url?: string;
+  status_code?: number;
+}> {
+  // Get the saved URL from settings
+  const settings = await getSettings();
+  const cfUrl = settings.data?.cloudflare_tunnel_url;
+
+  if (!cfUrl) {
+    return {
+      success: false,
+      message: 'No Cloudflare URL configured',
+      url: cfUrl,
+    };
+  }
+
+  return testCloudflareUrl(cfUrl);
 }
 
 // ============================================
@@ -589,7 +710,7 @@ export async function rejectItem(
   reason?: string
 ): Promise<ItemActionResponse> {
   const validatedId = validateId(id);
-  return apiPost<ItemActionResponse>(`/item/${validatedId}/reject`, reason ? { reason } : undefined);
+  return apiPost<ItemActionResponse>(`/item/${validatedId}/reject`, reason ? { reason } : {});
 }
 
 /**
@@ -605,6 +726,21 @@ export async function updateItemCaption(
 ): Promise<ItemActionResponse> {
   const validatedId = validateId(id);
   return apiPost<ItemActionResponse>(`/item/${validatedId}/caption`, captions);
+}
+
+/**
+ * Updates platforms for a content item (v17.8)
+ * @param id - Content item ID to update
+ * @param platforms - Platform string: 'ig', 'tt', or 'ig,tt'
+ * @returns Promise resolving to action response with updated platforms
+ * @throws Error if item not found or API request fails
+ */
+export async function updateItemPlatforms(
+  id: string | number,
+  platforms: 'ig' | 'tt' | 'ig,tt'
+): Promise<ItemActionResponse> {
+  const validatedId = validateId(id);
+  return apiPut<ItemActionResponse>(`/item/${validatedId}/platforms`, { platforms });
 }
 
 /**
@@ -745,6 +881,17 @@ export async function generateClientConfig(
     throw new Error(data.error || data.message || 'Config generation failed');
   }
   return data as GenerateConfigResponse;
+}
+
+/**
+ * Creates client folder structure with Photos, Videos, Stories subfolders
+ * @param slug - Client slug identifier
+ * @returns Promise resolving to folder creation result
+ */
+export async function createClientFolder(slug: string): Promise<{ success: boolean; message?: string; data?: unknown }> {
+  validateSlug(slug);
+  const { data } = await api.post(`/clients/${encodeRoute(slug)}/folder`);
+  return data;
 }
 
 export async function generateBatchBrief(
@@ -995,7 +1142,7 @@ export async function uploadFiles(
     success: failed === 0,
     message: `Uploaded ${successful} of ${files.length} files`,
     data: {
-      files: results.map(r => r.data.file),
+      files: results.map(r => r.data?.file).filter(Boolean),
       successful,
       failed,
     },

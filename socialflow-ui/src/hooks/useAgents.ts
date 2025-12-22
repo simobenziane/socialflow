@@ -151,9 +151,10 @@ export function useGenerateClientConfig() {
   return useMutation({
     mutationFn: ({ slug, onboarding }: { slug: string; onboarding: OnboardingInput }) =>
       generateClientConfig(slug, onboarding),
-    onSuccess: () => {
-      // Invalidate clients list after generation
+    onSuccess: (_, { slug }) => {
+      // Invalidate both clients list and the specific client detail
       queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.detail(slug) });
     },
   });
 }

@@ -1,0 +1,235 @@
+{
+  "name": "01_Late_Sync_v17",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        -150
+      ],
+      "id": "schedule-trigger-w0-daily",
+      "name": "Daily Sync (6 AM)"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "w0-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "54f54dd5-354c-4aa8-a09a-f348e0b6d110",
+      "name": "Webhook Trigger",
+      "webhookId": "w0-late-sync-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W0 v17: Load Config\n * Validates settings and database before API calls\n */\nconst fs = require('fs');\n\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst DB_PATH = `${CONFIG_BASE}/socialflow.db`;\nconst JOB_PATH = `${CONFIG_BASE}/active_job.json`;\n\nconsole.log('[W0] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');\nconsole.log('[W0] Starting Late Account Sync v17');\nconsole.log('[W0] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');\n\n// Load settings\nlet settings;\ntry {\n if (!fs.existsSync(SETTINGS_PATH)) {\n return [{\n json: {\n _error: true,\n error_code: 'CONFIG_MISSING',\n error_message: `settings.json not found at ${SETTINGS_PATH}`,\n _start_time: Date.now()\n }\n }];\n }\n settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n console.log('[W0] âœ“ settings.json loaded');\n} catch (e) {\n return [{\n json: {\n _error: true,\n error_code: 'CONFIG_MISSING',\n error_message: `Cannot parse settings.json: ${e.message}`,\n _start_time: Date.now()\n }\n }];\n}\n\nif (!settings.late_api?.base_url) {\n return [{\n json: {\n _error: true,\n error_code: 'CONFIG_MISSING',\n error_message: 'Missing late_api.base_url in settings.json',\n _start_time: Date.now()\n }\n }];\n}\n\n// Check database exists\nif (!fs.existsSync(DB_PATH)) {\n return [{\n json: {\n _error: true,\n error_code: 'DB_NOT_FOUND',\n error_message: `Database not found at ${DB_PATH}. Run init_database.js first.`,\n _start_time: Date.now()\n }\n }];\n}\n\nconsole.log('[W0] âœ“ Database found');\nconsole.log(`[W0] â„¹ Late API: ${settings.late_api.base_url}`);\n\nreturn [{\n json: {\n config_base: CONFIG_BASE,\n db_path: DB_PATH,\n job_path: JOB_PATH,\n late_api_base: settings.late_api.base_url,\n _start_time: Date.now(),\n _error: false\n }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "04abe11a-a6db-4b81-bf19-9f13864e24e9",
+      "name": "Load Config"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.late_api_base }}/profiles",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "lateApi",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        464,
+        0
+      ],
+      "id": "0f57cb59-fbb9-4246-985c-d3e1122c4e4f",
+      "name": "GET /v1/profiles",
+      "credentials": {
+        "lateApi": {
+          "id": "f7HR2n0CeD8DnWuZ",
+          "name": "LATE account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Load Config').item.json.late_api_base }}/accounts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "lateApi",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        704,
+        0
+      ],
+      "id": "d9ced3fe-fa3e-4407-9877-025928c4917e",
+      "name": "GET /v1/accounts",
+      "credentials": {
+        "lateApi": {
+          "id": "f7HR2n0CeD8DnWuZ",
+          "name": "LATE account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W0 v17: Process & Update Cache\n * Syncs Late accounts to cache file\n * NOTE: Database username sync removed (requires better-sqlite3 which isn't available in n8n sandbox)\n */\nconst fs = require('fs');\n\nconst config = $('Load Config').first().json;\n\n// Check for early error exit\nif (config._error) {\n  return [{ json: config }];\n}\n\nconst profilesResponse = $('GET /v1/profiles').first().json;\nconst accountsResponse = $('GET /v1/accounts').first().json;\n\nconsole.log('[W0] Processing API responses...');\n\n// Check for API errors\nconst apiErrors = [];\nlet error_code = null;\n\nfunction getErrorCode(response) {\n  const status = response.statusCode || 0;\n  if (status === 401) return 'LATE_AUTH_EXPIRED';\n  if (status === 403) return 'LATE_AUTH_FORBIDDEN';\n  if (status === 429) return 'LATE_RATE_LIMITED';\n  if (status >= 500 && status < 600) return 'LATE_SERVICE_ERROR';\n  if (status >= 400 && status < 500) return 'LATE_CLIENT_ERROR';\n  if (response.error) return 'LATE_NETWORK_ERROR';\n  return 'LATE_API_ERROR';\n}\n\nif (profilesResponse.error || (profilesResponse.statusCode && profilesResponse.statusCode >= 400)) {\n  error_code = getErrorCode(profilesResponse);\n  const errMsg = profilesResponse.error || profilesResponse.message || `HTTP ${profilesResponse.statusCode}`;\n  apiErrors.push({ endpoint: 'profiles', code: error_code, message: errMsg, statusCode: profilesResponse.statusCode });\n  console.log(`[W0] ✗ [${error_code}] Profiles API: ${errMsg}`);\n}\n\nif (accountsResponse.error || (accountsResponse.statusCode && accountsResponse.statusCode >= 400)) {\n  error_code = getErrorCode(accountsResponse);\n  const errMsg = accountsResponse.error || accountsResponse.message || `HTTP ${accountsResponse.statusCode}`;\n  apiErrors.push({ endpoint: 'accounts', code: error_code, message: errMsg, statusCode: accountsResponse.statusCode });\n  console.log(`[W0] ✗ [${error_code}] Accounts API: ${errMsg}`);\n}\n\nconst profiles = profilesResponse.profiles || [];\nconst accounts = accountsResponse.accounts || [];\n\n// Fail if both API calls failed and no data\nif (apiErrors.length > 0 && profiles.length === 0 && accounts.length === 0) {\n  return [{\n    json: {\n      _error: true,\n      error_code: apiErrors[0].code,\n      error_message: `Late API sync failed: ${apiErrors.map(e => e.message).join('; ')}`,\n      api_errors: apiErrors,\n      _start_time: config._start_time,\n      config_base: config.config_base,\n      job_path: config.job_path\n    }\n  }];\n}\n\nconsole.log(`[W0] ✓ Retrieved ${profiles.length} profiles, ${accounts.length} accounts`);\n\nconst now = new Date();\nconst nowISO = now.toISOString();\n\n// Build profile map\nconst profileMap = {};\nfor (const p of profiles) {\n  profileMap[p._id] = {\n    id: p._id,\n    name: p.name || 'Unnamed',\n    description: p.description || '',\n    color: p.color || '#cccccc',\n    is_default: p.isDefault || false\n  };\n}\n\n// Process accounts with health status\nconst processedAccounts = accounts.map(acc => {\n  let health = 'healthy';\n  let days_until_expiry = null;\n\n  if (acc.tokenExpiresAt) {\n    const expiryDate = new Date(acc.tokenExpiresAt);\n    if (isNaN(expiryDate.getTime())) {\n      health = 'warning';\n      days_until_expiry = -1;\n    } else {\n      const diffMs = expiryDate - now;\n      days_until_expiry = Math.floor(diffMs / (1000 * 60 * 60 * 24));\n    }\n\n    if (days_until_expiry <= 0) health = 'expired';\n    else if (days_until_expiry <= 7) health = 'warning';\n  }\n\n  const profile = profileMap[acc.profileId] || { name: 'Unknown', id: acc.profileId };\n\n  return {\n    id: acc._id,\n    late_account_id: acc._id,\n    platform: acc.platform || 'unknown',\n    username: acc.username || '',\n    display_name: acc.displayName || acc.username || '',\n    profile_picture: acc.profilePicture || '',\n    is_active: acc.isActive !== false,\n    token_expires_at: acc.tokenExpiresAt || null,\n    permissions: acc.permissions || [],\n    late_profile_id: (typeof acc.profileId === 'object' ? acc.profileId?._id : acc.profileId) || '',\n    late_profile_name: profile.name,\n    health,\n    days_until_expiry\n  };\n});\n\n// Health summary\nconst healthSummary = {\n  total_accounts: processedAccounts.length,\n  healthy: processedAccounts.filter(a => a.health === 'healthy').length,\n  warning: processedAccounts.filter(a => a.health === 'warning').length,\n  expired: processedAccounts.filter(a => a.health === 'expired').length\n};\n\n// Write cache file (atomic: write to .tmp then rename)\nconst ACCOUNTS_CACHE_PATH = `${config.config_base}/late_accounts.json`;\nconst ACCOUNTS_CACHE_TMP = `${ACCOUNTS_CACHE_PATH}.tmp.${Date.now()}.${Math.random().toString(36).slice(2)}`;\nconst cacheData = {\n  _description: 'Late accounts cache - synced by W0 v17',\n  version: '2.0',\n  synced_at: nowISO,\n  sync_status: apiErrors.length > 0 ? 'partial' : 'success',\n  api_errors: apiErrors,\n  accounts: processedAccounts,\n  profiles: Object.values(profileMap),\n  health_summary: healthSummary\n};\n\ntry {\n  fs.writeFileSync(ACCOUNTS_CACHE_TMP, JSON.stringify(cacheData, null, 2));\n  fs.renameSync(ACCOUNTS_CACHE_TMP, ACCOUNTS_CACHE_PATH);\n  console.log('[W0] ✓ Wrote cache to late_accounts.json');\n} catch (writeErr) {\n  console.log('[W0] Cache write error:', writeErr.message);\n  try {\n    fs.writeFileSync(ACCOUNTS_CACHE_PATH, JSON.stringify(cacheData, null, 2));\n  } catch (e) {\n    console.log('[W0] Fallback write also failed');\n  }\n}\n\nreturn [{\n  json: {\n    cacheData,\n    usernames_updated: 0,\n    update_results: [],\n    api_errors: apiErrors,\n    _start_time: config._start_time,\n    config_base: config.config_base,\n    job_path: config.job_path,\n    _error: false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        0
+      ],
+      "id": "aa3172b0-f929-4d3c-b880-419854273f26",
+      "name": "Process & Update DB"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W0 v17: Generate Report\n * Creates final sync report and writes job status\n */\nconst fs = require('fs');\nconst data = $input.first().json;\n\n// Atomic file write helper: write to .tmp then rename\nfunction atomicWriteJSON(filePath, data) {\n // Use unique temp file to prevent race conditions with concurrent syncs\n const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2)}`;\n fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));\n fs.renameSync(tmpPath, filePath);\n}\n\n// Handle early error exit\nif (data._error) {\n const duration = ((Date.now() - data._start_time) / 1000).toFixed(1);\n\n // Write job status (atomic)\n const jobPath = data.job_path || '/data/clients/_config/active_job.json';\n try {\n let jobs = { current: {}, executions: {} };\n if (fs.existsSync(jobPath)) {\n jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n }\n jobs.executions = jobs.executions || {};\n jobs.executions.W0 = {\n last_run: new Date().toISOString(),\n status: 'failed',\n duration_ms: Date.now() - data._start_time,\n error_code: data.error_code,\n error_message: data.error_message\n };\n atomicWriteJSON(jobPath, jobs);\n console.log('[W0] âœ“ Job status written (failed, atomic)');\n } catch (e) {\n console.log(`[W0] âš  Could not write job status: ${e.message}`);\n }\n\n console.log('[W0] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');\n console.log(`[W0] âœ— FAILED: ${data.error_code}`);\n console.log(`[W0] ${data.error_message}`);\n console.log('[W0] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');\n\n return [{\n json: {\n success: false,\n workflow: 'W0',\n error_code: data.error_code,\n error_message: data.error_message,\n errors: data.api_errors || [],\n duration_seconds: parseFloat(duration),\n generated_at: new Date().toISOString()\n }\n }];\n}\n\nconst { cacheData } = data;\nconst startTime = data._start_time || Date.now();\nconst duration = ((Date.now() - startTime) / 1000).toFixed(1);\n\nconst report = {\n success: data.api_errors.length === 0,\n workflow: 'W0',\n version: '16',\n generated_at: new Date().toISOString(),\n duration_seconds: parseFloat(duration),\n summary: {\n profiles_synced: cacheData.profiles.length,\n accounts_synced: cacheData.accounts.length,\n usernames_updated_in_db: data.usernames_updated\n },\n health: cacheData.health_summary,\n accounts_by_platform: {},\n database_updates: data.update_results,\n warnings: [],\n errors: data.api_errors || [],\n next_steps: []\n};\n\n// Add error info if partial failure\nif (data.api_errors.length > 0) {\n report.error_code = 'LATE_API_ERROR';\n report.error_message = 'Some API calls failed but sync completed partially';\n}\n\n// Count by platform\nfor (const acc of cacheData.accounts) {\n const platform = acc.platform || 'unknown';\n report.accounts_by_platform[platform] = (report.accounts_by_platform[platform] || 0) + 1;\n}\n\n// Generate warnings\nfor (const acc of cacheData.accounts) {\n if (acc.health === 'expired') {\n report.warnings.push(`EXPIRED: @${acc.username} (${acc.platform}) - token expired`);\n } else if (acc.health === 'warning') {\n report.warnings.push(`WARNING: @${acc.username} (${acc.platform}) - expires in ${acc.days_until_expiry} days`);\n }\n}\n\n// Next steps\nif (report.errors.length > 0) {\n report.next_steps.push('Check Late API credentials and connectivity');\n}\nif (report.health.expired > 0) {\n report.next_steps.push('Re-authenticate expired accounts in Late dashboard');\n}\nif (report.health.warning > 0) {\n report.next_steps.push('Plan to refresh tokens for accounts expiring soon');\n}\nif (cacheData.accounts.length === 0) {\n report.next_steps.push('Connect social accounts in Late dashboard first');\n}\n\n// Write job status (atomic)\nconst jobPath = data.job_path || '/data/clients/_config/active_job.json';\ntry {\n let jobs = { current: {}, executions: {} };\n if (fs.existsSync(jobPath)) {\n jobs = JSON.parse(fs.readFileSync(jobPath, 'utf8'));\n }\n jobs.executions = jobs.executions || {};\n jobs.executions.W0 = {\n last_run: new Date().toISOString(),\n status: data.api_errors.length > 0 ? 'partial' : 'success',\n duration_ms: Date.now() - startTime,\n summary: {\n profiles_synced: cacheData.profiles.length,\n accounts_synced: cacheData.accounts.length,\n usernames_updated: data.usernames_updated,\n health: cacheData.health_summary\n },\n ...(data.api_errors.length > 0 && { errors: data.api_errors })\n };\n atomicWriteJSON(jobPath, jobs);\n console.log('[W0] âœ“ Job status written (atomic)');\n} catch (e) {\n console.log(`[W0] âš  Could not write job status: ${e.message}`);\n}\n\nconsole.log('[W0] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');\nconsole.log(`[W0] âœ“ Sync complete: ${cacheData.accounts.length} accounts, ${data.usernames_updated} updates`);\nconsole.log(`[W0] Health: ${cacheData.health_summary.healthy} healthy, ${cacheData.health_summary.warning} warning, ${cacheData.health_summary.expired} expired`);\nconsole.log('[W0] â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');\n\nreturn [{ json: report }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "e3da4854-36ab-4a16-8d03-101d5da9dd5a",
+      "name": "Generate Report"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1424,
+        0
+      ],
+      "id": "20277132-6998-4e82-9995-72923a3cb210",
+      "name": "Webhook Response"
+    }
+  ],
+  "connections": {
+    "Daily Sync (6 AM)": {
+      "main": [
+        [
+          {
+            "node": "Load Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config": {
+      "main": [
+        [
+          {
+            "node": "GET /v1/profiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /v1/profiles": {
+      "main": [
+        [
+          {
+            "node": "GET /v1/accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /v1/accounts": {
+      "main": [
+        [
+          {
+            "node": "Process & Update DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process & Update DB": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "active": true,
+  "meta": {},
+  "tags": [],
+  "versionId": "d5e6db9b-276f-4d05-860c-4a57686bf3ec"
+}

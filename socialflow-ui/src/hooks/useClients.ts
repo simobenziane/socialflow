@@ -10,9 +10,11 @@ import {
   getArchivedClients,
   restoreClient,
   deleteArchivedClient,
+  generateClientConfig,
+  createClientFolder,
 } from '@/api/client';
 import { queryKeys } from '@/api/queryKeys';
-import type { CreateClientInput } from '@/api/types';
+import type { CreateClientInput, OnboardingInput } from '@/api/types';
 
 export function useClients() {
   return useQuery({
@@ -128,5 +130,33 @@ export function useDeleteArchivedClient() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients.archived });
     },
+  });
+}
+
+// ============================================
+// AI Config Generation
+// ============================================
+
+export function useRegenerateConfig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ slug, onboarding }: { slug: string; onboarding: OnboardingInput }) =>
+      generateClientConfig(slug, onboarding),
+    onSuccess: (_data, { slug }) => {
+      // Invalidate client detail to refetch with new brand data
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.detail(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+    },
+  });
+}
+
+// ============================================
+// Folder Creation
+// ============================================
+
+export function useCreateClientFolder() {
+  return useMutation({
+    mutationFn: (slug: string) => createClientFolder(slug),
   });
 }

@@ -265,13 +265,30 @@ story_time: "18:30"
 
 ## Development
 
-### Run in Development Mode
+### Rebuilding the UI (After Frontend Changes)
+
+**IMPORTANT:** The production UI runs on **port 3000** via Docker. After making any frontend changes, always rebuild the UI container:
+
+```bash
+# Recommended: Use the make command
+make ui
+
+# Or run directly:
+docker compose build socialflow-ui && docker compose up -d socialflow-ui
+```
+
+Then access the UI at **http://localhost:3000** (not port 5173).
+
+### Run in Development Mode (Hot Reload)
+
+For development with hot-reload, you can use the dev server, but remember this is NOT the production UI:
 
 ```bash
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
-- Frontend with hot-reload: **http://localhost:5173**
+- Dev server (hot-reload): **http://localhost:5173** *(development only)*
+- **Production UI: http://localhost:3000** *(always use this)*
 - n8n: **http://localhost:5678**
 
 ### Run Frontend Locally (without Docker)
@@ -279,7 +296,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```bash
 cd socialflow-ui
 npm install
-npm run dev
+npm run dev  # Starts on port 5173 - for dev only, not production!
 ```
 
 ### Run Tests

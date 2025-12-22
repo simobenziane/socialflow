@@ -1,0 +1,260 @@
+{
+  "name": "07_Agent_Config_v17",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "w-agent1-config",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "id": "agent1-webhook",
+      "name": "Webhook Trigger",
+      "webhookId": "w-agent1-config-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W-Agent1 v17: Prepare Context\n * Validates input and prepares context for generation steps\n * Phase 2.7: Added isEnglish flag for language-specific prompts\n */\nconst fs = require('fs');\n\nconsole.log('[Agent1] Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â');\nconsole.log('[Agent1] Starting Config Generator v17 (Multi-Step)');\nconsole.log('[Agent1] Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â');\n\nconst input = $input.first().json || {};\nconst body = input.body || input;\n\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst startTime = Date.now();\n\nconst slug = body.slug;\nconst onboarding = body.onboarding;\n\nif (!slug) {\n return [{ json: { success: false, error: 'Missing slug' } }];\n}\nif (!onboarding?.business_description) {\n return [{ json: { success: false, error: 'Missing business_description' } }];\n}\n\nconst lang = onboarding.language || 'fr';\nconst isEnglish = lang === 'en';\nconst langMap = { fr: 'French', de: 'German', en: 'English' };\nconst langName = langMap[lang] || 'French';\n\nconsole.log(`[Agent1] Client: ${slug}, Language: ${langName}, isEnglish: ${isEnglish}`);\n\nlet settings;\ntry {\n settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n} catch (e) {\n return [{ json: { success: false, error: 'Cannot load settings.json' } }];\n}\n\nconst OLLAMA_URL = settings.ollama?.url_docker || 'http://host.docker.internal:11434/api/generate';\nconst OLLAMA_MODEL = settings.ollama?.models?.config_generator || 'llama3.2:3b';\n\nconsole.log(`[Agent1] Model: ${OLLAMA_MODEL}`);\n\nreturn [{ json: {\n slug,\n onboarding,\n lang,\n isEnglish,\n langName,\n ollama_url: OLLAMA_URL,\n ollama_model: OLLAMA_MODEL,\n _start_time: startTime\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "id": "agent1-prepare",
+      "name": "Prepare Context"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ollama_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": ${ JSON.stringify($json.ollama_model) },\n  \"prompt\": ${ $json.isEnglish ? JSON.stringify(`Write ONLY a 80-100 word caption brief for ${$json.onboarding.business_name || $json.slug}.\n\nBusiness: ${($json.onboarding.business_description || '').substring(0, 150)}\nTone: ${$json.onboarding.brand_personality || 'professional and friendly'}\n\nIMPORTANT: Respond ONLY with the brief content. No greetings, no introduction, no \"here is\", no \"I'm happy to\". Start directly with the content.\n\nExpected format:\n[Adjective], [adjective] tone. Structure: hook (10 words) + description + call to action.\nHooks: \"[example 1]\", \"[example 2]\", \"[example 3]\"\nAvoid: prices, superlatives.\n\nBrief:`) : JSON.stringify(`Écris UNIQUEMENT un brief de 80-100 mots pour les captions de ${$json.onboarding.business_name || $json.slug}.\n\nDescription: ${($json.onboarding.business_description || '').substring(0, 150)}\nTon: ${$json.onboarding.brand_personality || 'chaleureux et professionnel'}\n\nIMPORTANT: Réponds UNIQUEMENT avec le brief. Pas de salutations, pas d'introduction, pas de \"voici\", pas de \"je suis ravi\". Commence directement par le contenu.\n\nFormat attendu:\nTon [adjectif], [adjectif]. Structure: accroche (10 mots) + description + appel à l'action.\nAccroches: \"[exemple 1]\", \"[exemple 2]\", \"[exemple 3]\"\nÀ éviter: prix, superlatifs.\n\nBrief:`) },\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.3, \"num_predict\": 200 }\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        480,
+        300
+      ],
+      "id": "agent1-gen-brief",
+      "name": "Generate Brief",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst prev = $('Prepare Context').item.json;\n\nlet briefTxt = '';\n\nif (!response.response) {\n console.log('[Agent1] Brief failed, using fallback');\n if (prev.isEnglish) {\n briefTxt = `# ${prev.onboarding.business_name || prev.slug}\n\nWarm and professional tone. Each post should hook, describe, and call to action.\n\nExample hooks:\n- Discover...\n- You'll love...\n- The secret to...\n\nRules: no prices, no superlatives.`;\n } else {\n briefTxt = `# ${prev.onboarding.business_name || prev.slug}\n\nTon chaleureux et professionnel. Chaque post doit accrocher, décrire, et inviter à l'action.\n\nExemples d'accroches:\n- Découvrez...\n- Vous allez adorer...\n- Le secret de...\n\nRègles: pas de prix, pas de superlatifs.`;\n }\n} else {\n briefTxt = response.response.trim()\n // Remove code blocks\n .replace(/^\\`\\`\\`[a-z]*\\n?/gm, '').replace(/\\`\\`\\`$/gm, '')\n // Remove common preambles (French)\n .replace(/^(Bonjour|Salut|Bonsoir)[^\\n]*\\n*/gi, '')\n .replace(/^(Je suis|Je serais)[^\\n]*\\n*/gi, '')\n .replace(/^(Voici|Voilà|D'accord|Bien\\s*sûr|Bien\\s*entendu|Avec\\s*plaisir|Absolument|Parfait|Certainement|Volontiers)[^\\n]*\\n*/gi, '')\n .replace(/^(Merci|Super|Excellent)[^\\n]*\\n*/gi, '')\n // Remove common preambles (English)\n .replace(/^(Here|Sure|Okay|Certainly|Of course|Happy to|I'd be|I am|I'm)[^\\n]*\\n*/gi, '')\n .replace(/^(Thank|Great|Excellent|Wonderful|Perfect)[^\\n]*\\n*/gi, '')\n // Remove markdown headers that just repeat the business name\n .replace(/^#+\\s*(Brief|Caption|Captions|Légende|Légendes)[^\\n]*\\n*/gi, '')\n // Remove \"Objet:\" style headers\n .replace(/^\\*\\*Objet[^*]*\\*\\*[^\\n]*\\n*/gi, '')\n // Clean up excessive newlines\n .replace(/\\n{3,}/g, '\\n\\n')\n .trim();\n}\n\nconsole.log(`[Agent1] Brief: ${briefTxt.length} chars`);\n\nreturn [{ json: { ...prev, brief_txt: briefTxt } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "id": "agent1-extract-brief",
+      "name": "Extract Brief"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ollama_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": ${ JSON.stringify($json.ollama_model) },\n  \"prompt\": ${ $json.isEnglish ? JSON.stringify(`Generate exactly 12 hashtags for ${$json.onboarding.business_name || $json.slug}.\n\nRESPOND ONLY WITH HASHTAGS, one per line. No explanations.\n\n#`) : JSON.stringify(`Génère exactement 12 hashtags pour ${$json.onboarding.business_name || $json.slug}.\n\nRÉPONDS UNIQUEMENT AVEC LES HASHTAGS, un par ligne. Pas d'explications.\n\n#`) },\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.5, \"num_predict\": 100 }\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        960,
+        300
+      ],
+      "id": "agent1-gen-hashtags",
+      "name": "Generate Hashtags",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst prev = $('Extract Brief').item.json;\n\nlet hashtagsArray = [];\n\nif (response.response) {\n const raw = response.response.trim();\n const tags = raw.match(/#[\\w\\u00C0-\\u024F]+/g) || [];\n if (tags.length > 0) {\n hashtagsArray = [...new Set(tags)].slice(0, 15);\n }\n}\n\nconsole.log(`[Agent1] Hashtags: ${hashtagsArray.join(' ')}`);\n\nconst elapsed = Date.now() - prev._start_time;\nconsole.log(`[Agent1] Generation done in ${elapsed}ms`);\n\n// Prepare API payload for PUT /clients/:slug\nreturn [{ json: {\n slug: prev.slug,\n apiPayload: {\n brand_voice: prev.brief_txt,\n brand_target_audience: prev.onboarding.target_audience || '',\n brand_description: prev.onboarding.business_description || '',\n hashtags: hashtagsArray,\n onboarding_data: prev.onboarding,\n ai_generated: true\n },\n generatedData: {\n brief: prev.brief_txt,\n hashtags: hashtagsArray\n }\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ],
+      "id": "agent1-build-response",
+      "name": "Build Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        300
+      ],
+      "id": "agent1-respond",
+      "name": "Respond"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://localhost:5678/webhook/api?route=/clients/{{ $json.slug }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.apiPayload) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        500
+      ],
+      "id": "save-to-db",
+      "name": "Save to Database"
+    },
+    {
+      "parameters": {
+        "jsCode": "const dbResponse = $json;\nconst prev = $('Build Response').item.json;\n\nif (dbResponse.success === false) {\n console.error('[Agent1] Failed to save to database:', dbResponse.error);\n return [{ json: {\n success: false,\n error: dbResponse.error || 'Failed to save configuration to database',\n error_code: 'DB_SAVE_ERROR'\n } }];\n}\n\nconsole.log('[Agent1] Configuration saved to database successfully');\n\nreturn [{ json: {\n success: true,\n message: 'Configuration generated and saved to database',\n data: {\n client_slug: prev.slug,\n brand_voice: prev.apiPayload.brand_voice,\n hashtags: prev.apiPayload.hashtags,\n ai_generated: true\n }\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        500
+      ],
+      "id": "build-final-response",
+      "name": "Build Final Response"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Context": {
+      "main": [
+        [
+          {
+            "node": "Generate Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Brief": {
+      "main": [
+        [
+          {
+            "node": "Extract Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Brief": {
+      "main": [
+        [
+          {
+            "node": "Generate Hashtags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Hashtags": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Save to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Database": {
+      "main": [
+        [
+          {
+            "node": "Build Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "versionId": "dadf6398-b30f-4e6f-af33-87b0078d3deb",
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

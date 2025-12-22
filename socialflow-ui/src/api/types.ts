@@ -22,7 +22,23 @@ export interface Client {
   schedule?: {
     feed_time: string;
     story_time: string;
+    // v17.8: Format-specific posting times
+    photo_time?: string;
+    video_time?: string;
   };
+  // AI-generated brand configuration
+  brand_voice?: string;
+  brand_target_audience?: string;
+  brand_description?: string;
+  hashtags?: string[];
+  onboarding_data?: OnboardingInput;
+  ai_generated?: boolean;
+  // AI Caption Settings (v16.1, v17.6)
+  video_ai_captions?: boolean;  // true = AI generates captions for videos
+  photo_ai_captions?: boolean;  // true = AI generates captions for photos (default)
+  // Late.com Profile Linking (v16.4)
+  late_profile_id?: string;  // Links to Late.com profile; all accounts under this profile belong to this client
+  late_profile?: LateProfile;  // Populated from cache when fetching client
 }
 
 export interface ClientsResponse {
@@ -43,10 +59,106 @@ export interface CreateClientInput {
   type: string;
   language: string;
   timezone: string;
+  // Late.com Profile Linking (v16.4) - replaces individual account selection
+  late_profile_id?: string;
+  // Legacy: individual account IDs (deprecated, kept for backward compatibility)
   instagram_account_id?: string;
   tiktok_account_id?: string;
-  feed_time?: string;
+  // Schedule times (v17.8) - Format-specific posting times
+  photo_time?: string;
+  video_time?: string;
   story_time?: string;
+  feed_time?: string; // Legacy: kept for backwards compatibility
+  // Brand configuration (for update)
+  brand_voice?: string;
+  brand_target_audience?: string;
+  brand_description?: string;
+  hashtags?: string[];
+  // AI Caption Settings (v16.1, v17.6)
+  video_ai_captions?: boolean;
+  photo_ai_captions?: boolean;
+}
+
+// ============================================
+// Late Config Types (v16.9)
+// ============================================
+
+export interface LateStatus {
+  configured: boolean;
+  plan_name?: string;
+  connected_at?: string;
+  synced_at?: string;
+}
+
+export interface LateStatusResponse {
+  success: boolean;
+  message?: string;
+  data: LateStatus;
+}
+
+export interface LateConnectResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  error_code?: string;
+  data?: {
+    plan_name: string;
+    connected_at: string;
+    limits?: Record<string, unknown>;
+  };
+}
+
+export interface LateSyncResponse {
+  success: boolean;
+  workflow: string;
+  version?: string;
+  message?: string;
+  error?: string;
+  error_code?: string;
+  error_message?: string;
+  generated_at?: string;
+  duration_seconds?: number;
+  summary?: {
+    profiles_synced: number;
+    accounts_synced: number;
+    usernames_updated_in_db: number;
+  };
+  health?: {
+    total_accounts: number;
+    healthy: number;
+    warning: number;
+    expired: number;
+  };
+  accounts_by_platform?: Record<string, number>;
+  database_updates?: Array<{
+    client: string;
+    platform: string;
+    old_username: string;
+    new_username: string;
+  }>;
+  warnings?: string[];
+  errors?: Array<{
+    endpoint: string;
+    code: string;
+    message: string;
+    statusCode?: number;
+  }>;
+  next_steps?: string[];
+}
+
+export interface LateProfilesResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    profiles: {
+      late_profile_id: string;
+      name: string;
+      color: string;
+      is_default: boolean;
+      accounts_count: number;
+    }[];
+    synced_at: string | null;
+  };
 }
 
 // ============================================
@@ -90,6 +202,47 @@ export interface AccountsResponse {
 }
 
 // ============================================
+// Late Post Types (v16.5)
+// ============================================
+
+export interface LatePostMedia {
+  type: 'image' | 'video';
+  url: string;
+  thumbnail_url?: string;
+  filename?: string;
+  mimeType?: string;
+}
+
+export interface LatePostPlatform {
+  platform: Platform;
+  accountId: string;
+  status: 'pending' | 'published' | 'failed';
+  platformPostUrl?: string | null;
+}
+
+export interface LatePost {
+  id: string;
+  content: string;
+  scheduled_for: string;
+  timezone?: string;
+  platforms: LatePostPlatform[];
+  media: LatePostMedia[];
+  status: 'scheduled' | 'published' | 'failed' | 'draft';
+  created_at?: string;
+}
+
+export interface ScheduledPostsResponse {
+  success: boolean;
+  message?: string;
+  data: {
+    posts: LatePost[];
+    synced_at: string | null;
+    total: number;
+    profile_id?: string;
+  };
+}
+
+// ============================================
 // Batch Types
 // ============================================
 
@@ -114,6 +267,11 @@ export interface Batch {
   status?: BatchStatus;
   /** Optional client slug for test compatibility */
   client?: string;
+  /** AI Caption Settings (v16.1, v17.6) - null = inherit from client */
+  video_ai_captions?: boolean | null;
+  photo_ai_captions?: boolean | null;
+  /** Schedule config (v17.8) - JSON with photo_time, video_time, story_time */
+  schedule_config?: string | { photo_time?: string; video_time?: string; story_time?: string; feed_time?: string };
 }
 
 export interface BatchesResponse {

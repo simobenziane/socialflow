@@ -1,11 +1,18 @@
-# Custom n8n image with ffmpeg for video processing
+# Custom n8n image with ffmpeg for video processing and better-sqlite3
 FROM n8nio/n8n:latest
 
 # Switch to root to install packages
 USER root
 
-# Install ffmpeg for video frame extraction and sqlite3 for database management
-RUN apk add --no-cache ffmpeg sqlite
+# Install ffmpeg, sqlite CLI, and build tools for native modules
+RUN apk add --no-cache ffmpeg sqlite python3 make g++
+
+# Install better-sqlite3 globally so VM2 sandbox can find it
+RUN npm install -g better-sqlite3
+
+# Also install in n8n's node_modules for direct access
+RUN cd /usr/local/lib/node_modules/n8n && \
+    npm install better-sqlite3 --save-optional || true
 
 # Create uploads directory
 RUN mkdir -p /data/uploads && chown -R node:node /data/uploads

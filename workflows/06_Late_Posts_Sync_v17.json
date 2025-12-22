@@ -1,0 +1,170 @@
+{
+  "name": "06_Late_Posts_Sync_v17",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "w4-posts-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "w4-webhook-trigger",
+      "name": "Webhook Trigger",
+      "webhookId": "w4-posts-sync-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W4 v17: Load Config & Get Client\n * Validates settings and looks up client by slug\n */\nconst fs = require('fs');\nconst Database = require('better-sqlite3');\n\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst DB_PATH = `${CONFIG_BASE}/socialflow.db`;\n\nconsole.log('[W4] ═══════════════════════════════════════');\nconsole.log('[W4] Starting Late Posts Sync v17');\nconsole.log('[W4] ═══════════════════════════════════════');\n\n// Get slug from query params\nconst slug = $input.first().json.query?.slug;\nif (!slug) {\n return [{\n json: {\n _error: true,\n error_code: 'MISSING_SLUG',\n error_message: 'Missing slug query parameter',\n _start_time: Date.now()\n }\n }];\n}\n\nconsole.log(`[W4] ℹ Client slug: ${slug}`);\n\n// Load settings\nlet settings;\ntry {\n if (!fs.existsSync(SETTINGS_PATH)) {\n return [{\n json: {\n _error: true,\n error_code: 'CONFIG_MISSING',\n error_message: `settings.json not found at ${SETTINGS_PATH}`,\n _start_time: Date.now()\n }\n }];\n }\n settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n console.log('[W4] ✓ settings.json loaded');\n} catch (e) {\n return [{\n json: {\n _error: true,\n error_code: 'CONFIG_MISSING',\n error_message: `Cannot parse settings.json: ${e.message}`,\n _start_time: Date.now()\n }\n }];\n}\n\nif (!settings.late_api?.base_url) {\n return [{\n json: {\n _error: true,\n error_code: 'CONFIG_MISSING',\n error_message: 'Missing late_api.base_url in settings.json',\n _start_time: Date.now()\n }\n }];\n}\n\n// Check database and get client\nlet client = null;\nlet db = null;\ntry {\n if (!fs.existsSync(DB_PATH)) {\n return [{\n json: {\n _error: true,\n error_code: 'DB_NOT_FOUND',\n error_message: `Database not found at ${DB_PATH}`,\n _start_time: Date.now()\n }\n }];\n }\n\n db = new Database(DB_PATH);\n client = db.prepare('SELECT * FROM clients WHERE slug = ?').get(slug);\n db.close();\n\n if (!client) {\n return [{\n json: {\n _error: true,\n error_code: 'CLIENT_NOT_FOUND',\n error_message: `Client not found: ${slug}`,\n _start_time: Date.now()\n }\n }];\n }\n\n if (!client.late_profile_id) {\n return [{\n json: {\n _error: true,\n error_code: 'NO_PROFILE',\n error_message: `Client ${slug} has no Late profile linked`,\n _start_time: Date.now()\n }\n }];\n }\n\n console.log(`[W4] ✓ Found client: ${client.name}`);\n console.log(`[W4] ℹ Late Profile ID: ${client.late_profile_id}`);\n} catch (e) {\n if (db) db.close();\n return [{\n json: {\n _error: true,\n error_code: 'DB_ERROR',\n error_message: `Database error: ${e.message}`,\n _start_time: Date.now()\n }\n }];\n}\n\nreturn [{\n json: {\n config_base: CONFIG_BASE,\n client_slug: slug,\n client_name: client.name,\n late_profile_id: client.late_profile_id,\n late_api_base: settings.late_api.base_url,\n _start_time: Date.now(),\n _error: false\n }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "w4-load-config",
+      "name": "Load Config & Get Client"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.late_api_base }}/posts?profileId={{ $json.late_profile_id }}&status=scheduled&limit=50",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "lateApi",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        480,
+        0
+      ],
+      "id": "w4-get-posts",
+      "name": "GET /v1/posts",
+      "credentials": {
+        "lateApi": {
+          "id": "f7HR2n0CeD8DnWuZ",
+          "name": "LATE account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W4 v17: Process & Cache Posts\n * Transforms Late API response and writes to cache file\n */\nconst fs = require('fs');\n\nconst config = $('Load Config & Get Client').first().json;\n\n// Check for early error exit\nif (config._error) {\n return [{ json: config }];\n}\n\nconst postsResponse = $('GET /v1/posts').first().json;\n\nconsole.log('[W4] ℹ Processing posts response...');\n\n// Check for API errors\nif (postsResponse.error || (postsResponse.statusCode && postsResponse.statusCode >= 400)) {\n const errMsg = postsResponse.error || postsResponse.message || `HTTP ${postsResponse.statusCode}`;\n console.log(`[W4] ✗ Late API error: ${errMsg}`);\n return [{\n json: {\n _error: true,\n error_code: 'LATE_API_ERROR',\n error_message: `Failed to fetch posts: ${errMsg}`,\n _start_time: config._start_time,\n client_slug: config.client_slug\n }\n }];\n}\n\nconst rawPosts = postsResponse.posts || [];\nconst pagination = postsResponse.pagination || { total: rawPosts.length };\n\nconsole.log(`[W4] ✓ Retrieved ${rawPosts.length} scheduled posts (total: ${pagination.total})`);\n\n// Transform posts to our format\nconst posts = rawPosts.map(post => {\n // Extract platform names from platforms array\n const platforms = (post.platforms || []).map(p => ({\n platform: p.platform,\n accountId: p.accountId,\n status: p.status || 'pending',\n platformPostUrl: p.platformPostUrl || null\n }));\n\n // Transform media items\n const media = (post.mediaItems || []).map(m => ({\n type: m.type || 'image',\n url: m.url || '',\n thumbnail_url: m.thumbnailUrl || m.url || '',\n filename: m.filename || '',\n mimeType: m.mimeType || ''\n }));\n\n return {\n id: post._id,\n content: post.content || '',\n scheduled_for: post.scheduledFor || '',\n timezone: post.timezone || 'Europe/Berlin',\n platforms: platforms,\n media: media,\n status: post.status || 'scheduled',\n created_at: post.createdAt || ''\n };\n});\n\n// Sort by scheduled date (earliest first)\nposts.sort((a, b) => new Date(a.scheduled_for) - new Date(b.scheduled_for));\n\n// Build cache data\nconst cacheData = {\n _description: 'Late scheduled posts cache - synced by W4 v17',\n synced_at: new Date().toISOString(),\n profile_id: config.late_profile_id,\n client_slug: config.client_slug,\n posts: posts,\n total: pagination.total\n};\n\n// Write cache file (atomic: write to .tmp then rename)\nconst CLIENT_DIR = `/data/clients/${config.client_slug}`;\nconst CACHE_PATH = `${CLIENT_DIR}/scheduled_posts.json`;\nconst CACHE_TMP = `${CACHE_PATH}.tmp`;\n\n// Ensure client directory exists\nif (!fs.existsSync(CLIENT_DIR)) {\n fs.mkdirSync(CLIENT_DIR, { recursive: true });\n}\n\nfs.writeFileSync(CACHE_TMP, JSON.stringify(cacheData, null, 2));\nfs.renameSync(CACHE_TMP, CACHE_PATH);\nconsole.log(`[W4] ✓ Wrote cache to ${CACHE_PATH} (atomic)`);\n\nreturn [{\n json: {\n cacheData,\n posts_count: posts.length,\n _start_time: config._start_time,\n client_slug: config.client_slug,\n _error: false\n }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "w4-process-cache",
+      "name": "Process & Cache Posts"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W4 v17: Generate Response\n * Creates final sync response\n */\nconst data = $input.first().json;\n\n// Handle error exit\nif (data._error) {\n const duration = ((Date.now() - data._start_time) / 1000).toFixed(1);\n\n console.log('[W4] ═══════════════════════════════════════');\n console.log(`[W4] ✗ FAILED: ${data.error_code}`);\n console.log(`[W4] ${data.error_message}`);\n console.log('[W4] ═══════════════════════════════════════');\n\n return [{\n json: {\n success: false,\n workflow: 'W4',\n error_code: data.error_code,\n error_message: data.error_message,\n client: data.client_slug || null,\n duration_seconds: parseFloat(duration),\n generated_at: new Date().toISOString()\n }\n }];\n}\n\nconst startTime = data._start_time || Date.now();\nconst duration = ((Date.now() - startTime) / 1000).toFixed(1);\n\nconst response = {\n success: true,\n workflow: 'W4',\n version: '16',\n client: data.client_slug,\n generated_at: new Date().toISOString(),\n duration_seconds: parseFloat(duration),\n data: {\n posts_synced: data.posts_count,\n total_scheduled: data.cacheData.total,\n synced_at: data.cacheData.synced_at\n }\n};\n\nconsole.log('[W4] ═══════════════════════════════════════');\nconsole.log(`[W4] ✓ Sync complete: ${data.posts_count} posts cached`);\nconsole.log(`[W4] Duration: ${duration}s`);\nconsole.log('[W4] ═══════════════════════════════════════');\n\nreturn [{ json: response }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "id": "w4-generate-response",
+      "name": "Generate Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        0
+      ],
+      "id": "w4-webhook-response",
+      "name": "Webhook Response"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Config & Get Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config & Get Client": {
+      "main": [
+        [
+          {
+            "node": "GET /v1/posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /v1/posts": {
+      "main": [
+        [
+          {
+            "node": "Process & Cache Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process & Cache Posts": {
+      "main": [
+        [
+          {
+            "node": "Generate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "versionId": "w4-posts-sync-v16",
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

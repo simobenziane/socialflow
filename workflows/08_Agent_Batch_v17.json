@@ -1,0 +1,151 @@
+{
+  "name": "08_Agent_Batch_v17",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "w-agent1-batch",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "id": "agent1b-webhook",
+      "name": "Webhook Trigger",
+      "webhookId": "w-agent1-batch-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W-Agent1-Batch v17: Load Config & Build Prompt\n * Builds slim completion-style prompt for batch brief generation\n */\nconst fs = require('fs');\nconst yaml = require('js-yaml');\n\nconsole.log('[Agent1-Batch] ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90');\nconsole.log('[Agent1-Batch] Starting Batch Brief Generator workflow v17');\nconsole.log('[Agent1-Batch] ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â\udc90');\n\nconst input = $input.first().json || {};\nconst body = input.body || input;\n\nconst CONFIG_BASE = '/data/clients/_config';\nconst SETTINGS_PATH = `${CONFIG_BASE}/settings.json`;\nconst LOCAL_BASE = '/data/clients';\nconst startTime = Date.now();\n\n// Validate input\nconst clientSlug = body.client;\nconst batchSlug = body.batch;\nconst description = body.description;\n\nif (!clientSlug || !batchSlug) {\n console.log('[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬â€\udc9d Missing client or batch');\n return [{ json: { success: false, error: 'Missing client or batch in request' } }];\n}\n\nif (!description || description.trim().length < 10) {\n console.log('[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬â€\udc9d Missing or too short description');\n return [{ json: { success: false, error: 'Description is required (minimum 10 characters)' } }];\n}\n\nconsole.log(`[Agent1-Batch] ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ Generating brief for: ${clientSlug}/${batchSlug}`);\n\n// Load settings\nlet settings;\ntry {\n settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));\n console.log('[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ settings.json loaded');\n} catch (e) {\n console.log(`[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬â€\udc9d Failed to load settings: ${e.message}`);\n return [{ json: { success: false, error: `Failed to load settings: ${e.message}` } }];\n}\n\n// Load client.yaml for context\nconst clientPath = `${LOCAL_BASE}/${clientSlug}`;\nconst clientYamlPath = `${clientPath}/client.yaml`;\nlet clientConfig = {};\n\ntry {\n if (fs.existsSync(clientYamlPath)) {\n clientConfig = yaml.load(fs.readFileSync(clientYamlPath, 'utf8'));\n console.log(`[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ client.yaml loaded: ${clientConfig.name || clientSlug}`);\n } else {\n console.log('[Agent1-Batch] ÃƒÂ¢Ã…Â¡Ã‚Â  No client.yaml found, using minimal context');\n }\n} catch (e) {\n console.log(`[Agent1-Batch] ÃƒÂ¢Ã…Â¡Ã‚Â  Could not load client.yaml: ${e.message}`);\n}\n\nconst clientName = clientConfig.name || clientSlug;\nconst lang = clientConfig.language || 'fr';\nconst isEnglish = lang === 'en';\n\n// Build optimized prompt with role, constraints, and example\nconst brandVoice = clientConfig.brand?.voice || 'chaleureux et professionnel';\n\nconst promptFr = `Tu es stratÃƒÆ’Ã‚Â¨ge de contenu pour ${clientName}. Ton: ${brandVoice}.\n\nÃƒÆ’Ã¢â‚¬Â°cris un brief de campagne (60-80 mots) pour \"${batchSlug}\".\nThÃƒÆ’Ã‚Â¨me: ${description.substring(0, 120)}\n\nInclure: ton ÃƒÆ’Ã‚Â  utiliser, structure des lÃƒÆ’Ã‚Â©gendes, 2-3 accroches exemples.\n\nExemple de brief:\n\"Ambiance festive et chaleureuse. LÃƒÆ’Ã‚Â©gendes: accroche ÃƒÆ’Ã‚Â©vocatrice, description sensorielle, invitation ÃƒÆ’Ã‚Â  l'action. Accroches: 'La magie des fÃƒÆ’Ã‚Âªtes...', 'Partagez un moment...' Pas de prix.\"\n\nBrief:`;\n\nconst promptEn = `You are a content strategist for ${clientName}. Tone: ${brandVoice}.\n\nWrite a campaign brief (60-80 words) for \"${batchSlug}\".\nTheme: ${description.substring(0, 120)}\n\nInclude: tone to use, caption structure, 2-3 example hooks.\n\nExample brief:\n\"Festive and warm atmosphere. Captions: evocative hook, sensory description, call to action. Hooks: 'Holiday magic...', 'Share a moment...' No prices.\"\n\nBrief:`;\n\nconst prompt = isEnglish ? promptEn : promptFr;\n\nconsole.log(`[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Built optimized prompt (${prompt.length} chars, lang: ${lang})`);\n\nconst OLLAMA_URL = settings.ollama?.url_docker || 'http://host.docker.internal:11434/api/generate';\nconst OLLAMA_MODEL = settings.ollama?.models?.config_generator || settings.ollama?.model || 'llama3.2:3b';\nconst OLLAMA_TIMEOUT = settings.ollama?.timeout_ms || 600000;\n\nconsole.log(`[Agent1-Batch] ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ Using model: ${OLLAMA_MODEL}`);\n\nreturn [{ json: {\n client: clientSlug,\n batch: batchSlug,\n description,\n prompt,\n ollama_url: OLLAMA_URL,\n ollama_model: OLLAMA_MODEL,\n ollama_timeout: OLLAMA_TIMEOUT,\n _start_time: startTime\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "id": "agent1b-load-config",
+      "name": "Load Config & Build Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ollama_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": {{ JSON.stringify($json.ollama_model) }},\n  \"prompt\": {{ JSON.stringify($json.prompt) }},\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.4,\n    \"num_predict\": 200\n  }\n}",
+        "options": {
+          "timeout": "={{ $json.ollama_timeout || 600000 }}"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        480,
+        300
+      ],
+      "id": "agent1b-call-ollama",
+      "name": "Call Ollama",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * W-Agent1-Batch v17: Parse Response\n * Cleans and validates the generated brief\n */\nconst response = $json;\nconst prev = $('Load Config & Build Prompt').item.json;\n\nconsole.log('[Agent1-Batch] ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¹ Parsing Ollama response');\n\nif (response.error || !response.response) {\n const errorMsg = response.error || response.message || 'No response from Ollama';\n console.log(`[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬â€\udc9d Ollama error: ${errorMsg}`);\n return [{ json: {\n success: false,\n error: `Ollama error: ${errorMsg}`,\n client: prev.client,\n batch: prev.batch\n } }];\n}\n\nlet brief = (response.response || '').trim();\n\n// Clean up common LLM artifacts\nbrief = brief.replace(/```[a-z]*\\n?/gi, '').replace(/```/g, '').trim();\nbrief = brief.replace(/^(BRIEF|BATCH BRIEF|OUTPUT)\\s*:?\\s*/im, '');\nbrief = brief.replace(/^Here('s| is) (the|your) (batch )?brief[:\\s]*/im, '');\n\n// Remove any leading/trailing quotes\nif ((brief.startsWith('\"') && brief.endsWith('\"')) || (brief.startsWith(\"'\") && brief.endsWith(\"'\"))) {\n brief = brief.slice(1, -1).trim();\n}\n\n// Validate minimum length\nif (brief.length < 50) {\n console.log('[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬â€\udc9d Generated brief too short');\n return [{ json: {\n success: false,\n error: 'Generated brief is too short. Try providing more detail in the description.',\n client: prev.client,\n batch: prev.batch\n } }];\n}\n\nconst elapsed = Date.now() - prev._start_time;\nconsole.log(`[Agent1-Batch] ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Brief generated (${brief.length} chars) in ${elapsed}ms`);\n\nreturn [{ json: {\n success: true,\n message: 'Batch brief generated successfully',\n data: {\n brief: brief,\n client: prev.client,\n batch: prev.batch\n }\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "id": "agent1b-parse-response",
+      "name": "Parse Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        300
+      ],
+      "id": "agent1b-respond",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Config & Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config & Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Call Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "versionId": "6342cc9f-ebb6-45c1-8933-4aacb01b9975",
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

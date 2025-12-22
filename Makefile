@@ -1,7 +1,7 @@
 # SocialFlow Makefile
 # Simple commands for managing the application
 
-.PHONY: setup start stop restart logs health clean init-db pull-models build help vps-setup vps-start vps-stop
+.PHONY: setup start stop restart logs health clean init-db pull-models build ui help vps-setup vps-start vps-stop
 
 # Default target
 help:
@@ -11,6 +11,7 @@ help:
 	@echo "Setup:"
 	@echo "  make setup       - Run initial setup (detects OS)"
 	@echo "  make build       - Build Docker containers"
+	@echo "  make ui          - Rebuild and restart UI (after frontend changes)"
 	@echo "  make init-db     - Initialize database"
 	@echo "  make pull-models - Pull Ollama models"
 	@echo ""
@@ -43,6 +44,11 @@ endif
 # Build containers
 build:
 	docker-compose build
+
+# Rebuild and restart UI container (use after frontend changes)
+# IMPORTANT: Always use this instead of npm run dev - the UI is served on port 3000 via Docker
+ui:
+	docker compose build socialflow-ui && docker compose up -d socialflow-ui
 
 # Start services
 start:

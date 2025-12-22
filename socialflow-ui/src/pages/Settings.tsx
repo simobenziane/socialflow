@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { GlassPanel } from '@/components/ui/glass-panel';
-import { useSettings, useUpdateSettings, useIsMounted } from '@/hooks';
+import { useSettings, useUpdateSettings, useIsMounted, useAccounts, useSyncAccounts } from '@/hooks';
 import { PageHeader, LoadingSpinner, ErrorAlert } from '@/components/shared';
+import { testCloudflareUrl } from '@/api/client';
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2,
@@ -31,9 +32,9 @@ import {
   MessageSquare,
   ChevronDown,
   Settings as SettingsIcon,
+  Calendar,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useSyncAccounts } from '@/hooks';
 import { cn } from '@/lib/utils';
 
 // Available models for selection
@@ -55,8 +56,12 @@ export default function Settings() {
   const [isPurging, setIsPurging] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Collapsible section states - Cloudflare open by default
-  const [isCloudflareOpen, setIsCloudflareOpen] = useState(true);
+  // Late.com integration (v16.10) - credential is in n8n, just need sync
+  const accounts = useAccounts();
+  const [isLateOpen, setIsLateOpen] = useState(true);
+
+  // Collapsible section states - Late and Cloudflare open by default
+  const [isCloudflareOpen, setIsCloudflareOpen] = useState(false);
   const [isAiProviderOpen, setIsAiProviderOpen] = useState(false);
   const [isOllamaModelsOpen, setIsOllamaModelsOpen] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -80,17 +85,6 @@ export default function Settings() {
 
   // Track component mount state to prevent memory leaks
   const isMountedRef = useIsMounted();
-
-  // Track active timeouts for cleanup on unmount
-  const activeTimeouts = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
-
-  // Cleanup all timeouts on unmount
-  useEffect(() => {
-    return () => {
-      activeTimeouts.current.forEach(clearTimeout);
-      activeTimeouts.current.clear();
-    };
-  }, []);
 
   // Test connection state
   const [isTesting, setIsTesting] = useState(false);
@@ -153,128 +147,37 @@ export default function Settings() {
 
   // Test Cloudflare connection - uses form input URL, not saved URL
   const handleTestConnection = async () => {
-    // Validate URL first
     const urlToTest = cloudflareUrl.trim();
     if (!urlToTest) {
       setTestResult({ success: false, message: 'Please enter a Cloudflare tunnel URL' });
       return;
     }
 
-    if (!urlToTest.startsWith('https://')) {
-      setTestResult({ success: false, message: 'URL must start with https://' });
-      return;
-    }
-
     setIsTesting(true);
     setTestResult(null);
 
-    // Test the URL from the form input directly
-    const cacheKey = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : Date.now().toString();
-    const testUrl = `${urlToTest}/_config/settings.json?_t=${cacheKey}`;
-    const TIMEOUT_MS = 10000;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, TIMEOUT_MS);
-    activeTimeouts.current.add(timeoutId);
-
     try {
-      const response = await fetch(testUrl, {
-        method: 'GET',
-        mode: 'cors',
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      activeTimeouts.current.delete(timeoutId);
+      // Use centralized tunnel testing function (15s timeout, handles CORS fallback)
+      const result = await testCloudflareUrl(urlToTest);
 
       if (isMountedRef.current) {
-        if (response.ok) {
-          setTestResult({
-            success: true,
-            message: `Tunnel is working! (${response.status})`,
-          });
-        } else {
-          setTestResult({
-            success: false,
-            message: `Tunnel returned error: ${response.status} ${response.statusText}`,
-          });
-        }
-        setIsTesting(false);
+        setTestResult({
+          success: result.success,
+          message: result.message,
+        });
       }
     } catch (err) {
-      clearTimeout(timeoutId);
-      activeTimeouts.current.delete(timeoutId);
-
-      if (!isMountedRef.current) return;
-
-      const isAbort = err instanceof Error && err.name === 'AbortError';
-      const isNetworkError = err instanceof TypeError;
-
-      if (isAbort) {
+      if (isMountedRef.current) {
+        const message = err instanceof Error ? err.message : 'Connection failed';
         setTestResult({
           success: false,
-          message: 'Connection timed out - tunnel may be offline',
+          message: `Test failed: ${message}`,
         });
+      }
+    } finally {
+      if (isMountedRef.current) {
         setIsTesting(false);
-        return;
       }
-
-      // Network error (CORS or unreachable) - try no-cors as fallback
-      if (isNetworkError) {
-        const fallbackController = new AbortController();
-        const fallbackTimeout = setTimeout(() => fallbackController.abort(), 5000);
-        activeTimeouts.current.add(fallbackTimeout);
-
-        try {
-          await fetch(testUrl, {
-            method: 'HEAD',
-            mode: 'no-cors',
-            cache: 'no-store',
-            signal: fallbackController.signal,
-          });
-
-          clearTimeout(fallbackTimeout);
-          activeTimeouts.current.delete(fallbackTimeout);
-
-          if (isMountedRef.current) {
-            setTestResult({
-              success: true,
-              message: 'Tunnel is reachable (CORS restricted)',
-            });
-          }
-        } catch (fallbackErr) {
-          clearTimeout(fallbackTimeout);
-          activeTimeouts.current.delete(fallbackTimeout);
-          const isFallbackAbort = fallbackErr instanceof Error && fallbackErr.name === 'AbortError';
-
-          if (isMountedRef.current) {
-            setTestResult({
-              success: false,
-              message: isFallbackAbort
-                ? 'Connection timed out - tunnel may be offline'
-                : 'Cannot reach tunnel - check if cloudflared is running',
-            });
-          }
-        } finally {
-          if (isMountedRef.current) {
-            setIsTesting(false);
-          }
-        }
-        return;
-      }
-
-      // Other errors
-      const message = err instanceof Error ? err.message : 'Connection failed';
-      setTestResult({
-        success: false,
-        message: `Cannot reach tunnel: ${message}`,
-      });
-      setIsTesting(false);
     }
   };
 
@@ -388,6 +291,31 @@ export default function Settings() {
     }
   };
 
+  // Handle Late.com sync
+  const handleLateSync = async () => {
+    try {
+      const result = await syncAccounts.mutateAsync();
+      if (result.success) {
+        toast({
+          title: 'Sync complete',
+          description: `${result.summary?.profiles_synced || 0} profiles, ${result.summary?.accounts_synced || 0} accounts`,
+        });
+      } else {
+        toast({
+          title: 'Sync failed',
+          description: result.error || 'Failed to sync',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Sync failed',
+        description: err instanceof Error ? err.message : 'Failed to sync',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (isLoading) return <LoadingSpinner text="Loading settings..." />;
 
   if (error) {
@@ -404,6 +332,12 @@ export default function Settings() {
   const savedAiProvider = settings?.ai_provider || 'ollama';
   const isCloudflareValid = savedCloudflareUrl.startsWith('https://') && !savedCloudflareUrl.includes('PASTE-YOUR');
   const isAiConfigured = savedAiProvider === 'gemini' ? !!settings?.gemini?.api_key : !!settings?.ollama?.models?.image_describer || !!settings?.ollama?.model;
+
+  // Late.com status derived from accounts cache
+  const lateProfiles = accounts.data?.data?.profiles || [];
+  const lateAccountsList = accounts.data?.data?.accounts || [];
+  const lateSyncedAt = accounts.data?.data?.synced_at;
+  const isLateConfigured = lateProfiles.length > 0 || !!lateSyncedAt;
 
   // Helper component for collapsible section header
   const SectionHeader = ({
@@ -474,7 +408,42 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* Late.com Status */}
+          <div className={cn(
+            'flex items-start gap-3 p-4 rounded-xl border transition-colors',
+            isLateConfigured
+              ? 'bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+              : 'bg-rose-50/50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800'
+          )}>
+            <div className={cn(
+              'p-2 rounded-full',
+              isLateConfigured ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-rose-100 dark:bg-rose-900/50'
+            )}>
+              {isLateConfigured ? (
+                <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-medium">Late.com</span>
+                <Badge variant={isLateConfigured ? 'approved' : 'failed'}>
+                  {isLateConfigured ? 'Connected' : 'Not Connected'}
+                </Badge>
+              </div>
+              {isLateConfigured ? (
+                <p className="text-xs text-muted-foreground">
+                  {lateProfiles.length} profiles, {lateAccountsList.length} accounts
+                  {lateSyncedAt && ` • Synced ${new Date(lateSyncedAt).toLocaleDateString()}`}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Click Sync below</p>
+              )}
+            </div>
+          </div>
+
           {/* Cloudflare Status */}
           <div className={cn(
             'flex items-start gap-3 p-4 rounded-xl border transition-colors',
@@ -549,6 +518,86 @@ export default function Settings() {
 
       {/* Accordion Sections */}
       <div className="space-y-3">
+        {/* Late.com Integration */}
+        <Collapsible open={isLateOpen} onOpenChange={setIsLateOpen}>
+          <Card variant="elevated" className="overflow-hidden" data-testid="late-section">
+            <CollapsibleTrigger asChild>
+              <button className="w-full p-4 text-left hover:bg-muted/50 transition-colors">
+                <SectionHeader
+                  icon={Calendar}
+                  title="Late.com Integration"
+                  description="Connect your Late.com account for scheduling"
+                  badge={isLateConfigured && <Badge variant="approved" className="text-[10px]">Connected</Badge>}
+                  isOpen={isLateOpen}
+                  iconColor="bg-orange-50 dark:bg-orange-900/30"
+                />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0 pb-4 space-y-4 border-t">
+                <div className="space-y-4 pt-4">
+                  {/* Status display */}
+                  <div className={cn(
+                    'flex items-center justify-between p-4 rounded-xl border',
+                    isLateConfigured
+                      ? 'bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-slate-50/50 dark:bg-slate-900/20 border-slate-200 dark:border-slate-700'
+                  )}>
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        'p-2 rounded-full',
+                        isLateConfigured ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-slate-100 dark:bg-slate-800/50'
+                      )}>
+                        {isLateConfigured ? (
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        ) : (
+                          <Calendar className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                        )}
+                      </div>
+                      <div>
+                        <p className={cn(
+                          'font-medium',
+                          isLateConfigured ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-300'
+                        )}>
+                          {isLateConfigured ? 'Late.com Connected' : 'Click Sync to fetch profiles'}
+                        </p>
+                        <p className={cn(
+                          'text-sm',
+                          isLateConfigured ? 'text-emerald-600/80 dark:text-emerald-400/80' : 'text-slate-500 dark:text-slate-400'
+                        )}>
+                          {isLateConfigured ? (
+                            <>
+                              {lateProfiles.length} profiles, {lateAccountsList.length} accounts
+                              {lateSyncedAt && ` • Synced: ${new Date(lateSyncedAt).toLocaleString()}`}
+                            </>
+                          ) : (
+                            'n8n credential is configured - sync to load profiles'
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={handleLateSync}
+                      disabled={syncAccounts.isPending}
+                      data-testid="late-sync-button"
+                    >
+                      {syncAccounts.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                      )}
+                      Sync Profiles
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Syncs profiles and accounts from Late.com using the n8n credential. Profiles are used when creating clients.
+                  </p>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
         {/* Cloudflare Integration */}
         <Collapsible open={isCloudflareOpen} onOpenChange={setIsCloudflareOpen}>
           <Card variant="elevated" className="overflow-hidden" data-testid="cloudflare-section">

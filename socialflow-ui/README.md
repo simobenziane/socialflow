@@ -14,11 +14,22 @@ React frontend for the SocialFlow content automation system.
 
 ## Quick Start
 
+> **IMPORTANT:** The production UI is served via Docker on **port 3000**.
+> After making changes, always rebuild the Docker container:
+> ```bash
+> # From project root:
+> make ui
+> # Or: docker compose build socialflow-ui && docker compose up -d socialflow-ui
+> ```
+> Then access the UI at **http://localhost:3000** (NOT port 5173).
+
+### Development Commands
+
 ```bash
 # Install dependencies
 npm install
 
-# Start development server (port 5173)
+# Start development server (port 5173) - FOR DEV ONLY, NOT PRODUCTION
 npm run dev
 
 # Build for production

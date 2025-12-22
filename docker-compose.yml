@@ -3,6 +3,9 @@ version: '3.8'
 services:
   # ===========================================
   # Frontend - React SPA via nginx
+  # IMPORTANT: This is the PRIMARY UI - always use http://localhost:3000
+  # After making frontend changes, run: make ui (or docker compose build socialflow-ui && docker compose up -d socialflow-ui)
+  # Do NOT use npm run dev (port 5173) - that's for development only
   # ===========================================
   socialflow-ui:
     build:

@@ -1,5 +1,11 @@
 # Client Onboarding Automation Plan
 
+> **STATUS: DEFERRED TO v17+**
+>
+> The file upload infrastructure described in this document has been **deferred to a future version**.
+> v16 implements guided onboarding with folder-based file ingestion (existing workflow).
+> See `GUIDED_ONBOARDING_IMPLEMENTATION.md` for the v16 implementation details.
+
 ## Goal
 
 Automate client onboarding with:

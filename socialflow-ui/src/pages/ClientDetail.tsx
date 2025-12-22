@@ -17,10 +17,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useClient, useBatches, useDeleteClient, useArchiveClient, useIngest, useGenerate, useSchedule, useClientInstructions, useUpdateAgentInstruction, useGenerateClientConfig, useIsMounted } from '@/hooks';
+import { useClient, useBatches, useDeleteClient, useArchiveClient, useIngest, useGenerate, useSchedule, useClientInstructions, useUpdateAgentInstruction, useGenerateClientConfig, useIsMounted, useAccounts } from '@/hooks';
 import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner, ErrorAlert, EmptyState, PageHeader } from '@/components/shared';
-import { FolderOpen, ChevronRight, Clock, Globe, MessageSquare, Trash2, Archive, Play, Sparkles, Calendar, Image, Video, Bot, Save, RefreshCw, FileText, CheckCircle, AlertCircle, Pencil } from 'lucide-react';
+import { ScheduledPostsSection } from '@/components/ScheduledPostsSection';
+import { FolderOpen, ChevronRight, Clock, Globe, MessageSquare, Trash2, Archive, Play, Sparkles, Calendar, Image, Video, Bot, Save, RefreshCw, FileText, AlertCircle, Pencil, Link2 } from 'lucide-react';
 import type { Batch } from '@/api/types';
 
 export default function ClientDetail() {
@@ -28,6 +29,7 @@ export default function ClientDetail() {
   const navigate = useNavigate();
   const client = useClient(slug || '');
   const batches = useBatches(slug || '');
+  const accounts = useAccounts();
 
   // Track component mount state to prevent memory leaks
   const isMountedRef = useIsMounted();
@@ -127,48 +129,60 @@ export default function ClientDetail() {
   const handleIngest = async (batchName: string) => {
     try {
       await ingest.mutateAsync({ client: slug, batch: batchName });
-      toast({
-        title: 'Ingest started',
-        description: `Processing ${batchName}...`,
-      });
+      if (isMountedRef.current) {
+        toast({
+          title: 'Ingest started',
+          description: `Processing ${batchName}...`,
+        });
+      }
     } catch (error) {
-      toast({
-        title: 'Ingest failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
+      if (isMountedRef.current) {
+        toast({
+          title: 'Ingest failed',
+          description: error instanceof Error ? error.message : 'Unknown error',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
   const handleGenerate = async (batchName: string) => {
     try {
       await generate.mutateAsync({ client: slug, batch: batchName });
-      toast({
-        title: 'Caption generation started',
-        description: `Generating captions for ${batchName}...`,
-      });
+      if (isMountedRef.current) {
+        toast({
+          title: 'Caption generation started',
+          description: `Generating captions for ${batchName}...`,
+        });
+      }
     } catch (error) {
-      toast({
-        title: 'Generation failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
+      if (isMountedRef.current) {
+        toast({
+          title: 'Generation failed',
+          description: error instanceof Error ? error.message : 'Unknown error',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
   const handleSchedule = async (batchName: string) => {
     try {
       await schedule.mutateAsync({ client: slug, batch: batchName });
-      toast({
-        title: 'Scheduling started',
-        description: `Scheduling ${batchName} to Late.com...`,
-      });
+      if (isMountedRef.current) {
+        toast({
+          title: 'Scheduling started',
+          description: `Scheduling ${batchName} to Late.com...`,
+        });
+      }
     } catch (error) {
-      toast({
-        title: 'Schedule failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
+      if (isMountedRef.current) {
+        toast({
+          title: 'Schedule failed',
+          description: error instanceof Error ? error.message : 'Unknown error',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -179,10 +193,10 @@ export default function ClientDetail() {
     try {
       const result = await generateConfig.mutateAsync({
         slug: clientData.slug,
-        onboarding: {
+        onboarding: clientData.onboarding_data || {
           business_name: clientData.name,
-          business_description: `${clientData.name} - ${clientData.type} business`,
-          target_audience: '',
+          business_description: clientData.brand_description || `${clientData.name} - ${clientData.type} business`,
+          target_audience: clientData.brand_target_audience || '',
           brand_personality: '',
           language: clientData.language,
           content_themes: '',
@@ -192,11 +206,11 @@ export default function ClientDetail() {
       });
       setConfigGenResult({
         success: true,
-        message: result.message || 'Config files generated successfully',
+        message: result.message || 'Brand configuration generated successfully',
       });
       toast({
-        title: 'Config files generated',
-        description: `Created client.yaml, brief.txt, and hashtags.txt for ${clientData.name}`,
+        title: 'Brand configuration generated',
+        description: `Brand voice and hashtags generated for ${clientData.name}`,
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -205,7 +219,7 @@ export default function ClientDetail() {
         message: errorMsg,
       });
       toast({
-        title: 'Config generation failed',
+        title: 'Generation failed',
         description: errorMsg,
         variant: 'destructive',
       });
@@ -414,54 +428,162 @@ export default function ClientDetail() {
             </Card>
           </div>
 
-          {/* Generate Config Files */}
+          {/* Brand Configuration (AI-Generated) */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Config Files
-              </CardTitle>
-              <CardDescription>
-                Generate or regenerate configuration files (client.yaml, brief.txt, hashtags.txt) required for the ingest workflow.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5" />
+                    Brand Configuration
+                    {clientData.ai_generated && (
+                      <Badge variant="outline" className="ml-2 text-purple-600 border-purple-200 bg-purple-50 dark:text-purple-400 dark:border-purple-800 dark:bg-purple-950/30">
+                        AI Generated
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    {clientData.ai_generated
+                      ? 'AI-generated brand voice and hashtags for content creation.'
+                      : 'Generate brand configuration to help AI create better captions.'}
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  {clientData.ai_generated && (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`/clients/${slug}/edit`}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit
+                      </Link>
+                    </Button>
+                  )}
+                  <Button
+                    onClick={handleGenerateConfig}
+                    disabled={isGeneratingConfig}
+                    variant={clientData.ai_generated ? 'outline' : 'default'}
+                    size="sm"
+                  >
+                    {isGeneratingConfig ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        {clientData.ai_generated ? 'Regenerate' : 'Generate'}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">
-                    These files are required for W1 Ingest to work. If ingest fails with "Client not found", generate config files here.
-                  </p>
-                  {configGenResult && (
-                    <div className={`flex items-center gap-2 text-sm ${configGenResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                      {configGenResult.success ? (
-                        <CheckCircle className="h-4 w-4" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4" />
-                      )}
+              {clientData.ai_generated ? (
+                <div className="space-y-4">
+                  {clientData.brand_voice && (
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Brand Voice</Label>
+                      <p className="mt-1 text-sm whitespace-pre-wrap bg-muted/50 rounded-md p-3">
+                        {clientData.brand_voice.length > 500
+                          ? clientData.brand_voice.substring(0, 500) + '...'
+                          : clientData.brand_voice}
+                      </p>
+                    </div>
+                  )}
+                  {clientData.brand_target_audience && (
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Target Audience</Label>
+                      <p className="mt-1 text-sm">{clientData.brand_target_audience}</p>
+                    </div>
+                  )}
+                  {clientData.hashtags && clientData.hashtags.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Hashtags</Label>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {clientData.hashtags.map((tag, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">
+                            {tag.startsWith('#') ? tag : `#${tag}`}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">No brand configuration generated yet.</p>
+                  <p className="text-xs mt-1">Click "Generate" to create AI-powered brand guidelines.</p>
+                  {configGenResult && !configGenResult.success && (
+                    <div className="flex items-center justify-center gap-2 text-sm text-red-600 mt-3">
+                      <AlertCircle className="h-4 w-4" />
                       {configGenResult.message}
                     </div>
                   )}
                 </div>
-                <Button
-                  onClick={handleGenerateConfig}
-                  disabled={isGeneratingConfig}
-                  variant="outline"
-                >
-                  {isGeneratingConfig ? (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      Generate Config Files
-                    </>
-                  )}
-                </Button>
-              </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Late.com Integration */}
+          {(() => {
+            const profiles = accounts.data?.data?.profiles || [];
+            const linkedProfile = clientData.late_profile_id
+              ? profiles.find(p => p.id === clientData.late_profile_id)
+              : null;
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Link2 className="h-5 w-5" />
+                    Late.com Integration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {linkedProfile ? (
+                    <div className="flex items-center gap-3 p-4 rounded-lg border bg-muted/30">
+                      <div
+                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: linkedProfile.color }}
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium">{linkedProfile.name}</p>
+                        {linkedProfile.description && (
+                          <p className="text-sm text-muted-foreground">{linkedProfile.description}</p>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 dark:text-green-400 dark:border-green-800 dark:bg-green-950/30">
+                        Connected
+                      </Badge>
+                    </div>
+                  ) : clientData.late_profile_id ? (
+                    <div className="flex items-center gap-3 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10">
+                      <AlertCircle className="h-5 w-5 text-yellow-600" />
+                      <div className="flex-1">
+                        <p className="font-medium text-yellow-700 dark:text-yellow-400">Profile not found</p>
+                        <p className="text-sm text-muted-foreground">
+                          The linked profile may have been removed from Late.com. Edit the client to select a new profile.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <Link2 className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">No Late.com profile linked</p>
+                      <p className="text-xs mt-1">
+                        <Link to={`/clients/${slug}/edit`} className="text-primary hover:underline">
+                          Edit client
+                        </Link>
+                        {' '}to connect a Late.com profile for scheduling.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Linked Accounts */}
       <Card>
@@ -500,6 +622,12 @@ export default function ClientDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Scheduled Posts from Late.com (v16.5) */}
+      <ScheduledPostsSection
+        slug={slug}
+        profileId={clientData.late_profile_id}
+      />
 
       {/* Batches */}
       <Card>
