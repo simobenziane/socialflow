@@ -5,6 +5,7 @@
 # Dependencies
 node_modules/
 socialflow-ui/node_modules/
+scripts/node_modules/
 
 # Build outputs
 socialflow-ui/dist/
@@ -49,6 +50,12 @@ coverage/
 *.tmp
 *.temp
 *.bak
+temp_*.js
+route_*.js
+response.txt
+
+# Windows null device artifacts
+nul
 
 # Claude Code files
 .claude/
