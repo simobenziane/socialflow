@@ -96,6 +96,9 @@ cd socialflow
 # Start services (daily)
 make start       # or .\scripts\start-windows.ps1 (Windows)
 
+# Update from GitHub
+make update      # Pulls latest, rebuilds, restarts
+
 # Check health
 make health      # or .\scripts\check-health.ps1 (Windows)
 
@@ -122,6 +125,17 @@ The script will:
 4. Build and start containers
 
 See [docs/VPS_HYBRID.md](docs/VPS_HYBRID.md) for full guide.
+
+### Mac Deployment
+
+For Mac-specific deployment with auto-update from GitHub:
+
+```bash
+# Update from GitHub (pulls, rebuilds, restarts)
+make update
+```
+
+See [docs/MAC_DEPLOYMENT.md](docs/MAC_DEPLOYMENT.md) for full guide including automatic updates.
 
 ---
 

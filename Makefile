@@ -1,7 +1,7 @@
 # SocialFlow Makefile
 # Simple commands for managing the application
 
-.PHONY: setup start stop restart logs health clean init-db pull-models build ui help vps-setup vps-start vps-stop
+.PHONY: setup start stop restart logs health clean init-db pull-models build ui help update vps-setup vps-start vps-stop
 
 # Default target
 help:
@@ -12,6 +12,7 @@ help:
 	@echo "  make setup       - Run initial setup (detects OS)"
 	@echo "  make build       - Build Docker containers"
 	@echo "  make ui          - Rebuild and restart UI (after frontend changes)"
+	@echo "  make update      - Pull latest from GitHub and rebuild"
 	@echo "  make init-db     - Initialize database"
 	@echo "  make pull-models - Pull Ollama models"
 	@echo ""
@@ -87,6 +88,17 @@ init-db:
 pull-models:
 	ollama pull llava:7b
 	ollama pull llama3.2:3b
+
+# Update from GitHub and rebuild
+update:
+ifeq ($(OS),Windows_NT)
+	@echo "Pulling latest changes..."
+	git pull origin main
+	docker-compose build
+	docker-compose up -d
+else
+	@chmod +x scripts/update.sh && ./scripts/update.sh
+endif
 
 # Clean up everything
 clean:
