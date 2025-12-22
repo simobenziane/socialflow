@@ -26,8 +26,8 @@ export const TIMING = {
 export const EXTERNAL_URLS = {
   /** Late.com app base URL */
   LATE_APP: 'https://app.getlate.dev',
-  /** n8n dashboard URL (local development) */
-  N8N_DASHBOARD: 'http://localhost:5678',
+  /** n8n dashboard URL - configurable via VITE_N8N_DASHBOARD env var */
+  N8N_DASHBOARD: import.meta.env.VITE_N8N_DASHBOARD || 'http://localhost:5678',
 } as const;
 
 /**

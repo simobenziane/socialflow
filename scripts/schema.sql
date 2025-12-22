@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS content_items (
     -- PENDING → NEEDS_AI → NEEDS_REVIEW → APPROVED → SCHEDULED → PUBLISHED
     -- Special: BLOCKED, FAILED, REJECTED
 
+    error_code TEXT,  -- Error code for categorizing failures (e.g., 'LATE_AUTH_EXPIRED', 'RATE_LIMITED', 'EMPTY_CAPTION')
     error_message TEXT,
     retry_count INTEGER DEFAULT 0,
 

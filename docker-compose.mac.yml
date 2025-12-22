@@ -9,9 +9,9 @@ services:
     volumes:
       # Use cached mode for better Mac performance
       - ${DATA_PATH:-./data}:/data/clients:cached
-      - ./files/workflows:/opt/workflows:ro,cached
-      - ./files/config:/opt/config-templates:ro,cached
-      - ./files/scripts:/opt/scripts:ro,cached
+      - ./workflows:/opt/workflows:ro,cached
+      - ./config:/opt/config-templates:ro,cached
+      - ./scripts:/opt/scripts:ro,cached
     # Increase shared memory for better performance
     shm_size: '256mb'
 

@@ -229,7 +229,14 @@ Copy the generated tunnel URL (e.g., `https://abc-xyz.trycloudflare.com`).
 
 1. Open n8n at **http://localhost:5678**
 2. Go to **Credentials** → **Add Credential**
-3. Add "Header Auth" with your Late.com API key
+3. Select **Header Auth** type
+4. Configure:
+   - **Name**: `LATE account` (must match exactly)
+   - **Header Name**: `Authorization`
+   - **Header Value**: `Bearer YOUR_LATE_API_KEY`
+5. Click **Save**
+
+> **Note**: After creating the credential, the workflows will automatically use it. The credential ID is stored locally in your n8n instance and is not portable between installations.
 
 ## Usage
 

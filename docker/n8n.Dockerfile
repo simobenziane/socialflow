@@ -4,8 +4,8 @@ FROM n8nio/n8n:latest
 # Switch to root to install packages
 USER root
 
-# Install ffmpeg, sqlite CLI, and build tools for native modules
-RUN apk add --no-cache ffmpeg sqlite python3 make g++
+# Install ffmpeg, sqlite CLI, wget for health checks, and build tools for native modules
+RUN apk add --no-cache ffmpeg sqlite wget curl python3 make g++
 
 # Install better-sqlite3 globally so VM2 sandbox can find it
 RUN npm install -g better-sqlite3

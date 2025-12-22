@@ -49,6 +49,9 @@ services:
       - EXECUTIONS_DATA_SAVE_ON_PROGRESS=true
       - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
 
+      # Ollama - AI model server running on host
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+
       # Allow local file access for workflows
       - NODE_FUNCTION_ALLOW_BUILTIN=*
       - NODE_FUNCTION_ALLOW_EXTERNAL=*
