@@ -16,6 +16,7 @@ SocialFlow automates the entire social media content pipeline: ingest media, gen
 | [Setup Guide](docs/SETUP.md) | Installation & configuration |
 | [Mac Deployment](docs/MAC_DEPLOYMENT.md) | Mac setup with auto-update |
 | [VPS Hybrid](docs/VPS_HYBRID.md) | Deploy n8n on VPS, Ollama locally |
+| [Cloudflare Tunnel](CLOUDFLARE_TUNNEL_SETUP.md) | Permanent tunnel URL setup |
 | [API Reference](docs/API_REFERENCE.md) | REST API endpoints |
 | [Workflows](docs/WORKFLOWS.md) | n8n workflow documentation |
 | [Scheduling](docs/SCHEDULING.md) | Content scheduling guide |
