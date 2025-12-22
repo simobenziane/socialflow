@@ -271,7 +271,7 @@ export interface Batch {
   video_ai_captions?: boolean | null;
   photo_ai_captions?: boolean | null;
   /** Schedule config (v17.8) - JSON with photo_time, video_time, story_time */
-  schedule_config?: string | { photo_time?: string; video_time?: string; story_time?: string; feed_time?: string };
+  schedule_config?: string | ScheduleConfigObject;
 }
 
 export interface BatchesResponse {
@@ -319,8 +319,37 @@ export type ContentStatus =
 export type MediaType = 'photo' | 'video';
 export type SlotType = 'feed' | 'story';
 
+// Platform codes: 'ig' for Instagram, 'tt' for TikTok, comma-separated for multiple
+export type PlatformCode = 'ig' | 'tt' | 'ig,tt' | 'tt,ig';
+
+// Schedule config can come from DB as string or be parsed as object
+export interface ScheduleConfigObject {
+  photo_time?: string;
+  video_time?: string;
+  story_time?: string;
+  feed_time?: string;  // Legacy: used if photo_time not set
+  start_date?: string;
+  strategy?: 'daily' | 'weekdays' | 'custom';
+}
+
+/**
+ * Parse schedule_config from string or object
+ * Safely handles both DB string format and already-parsed objects
+ */
+export function parseScheduleConfig(config: string | ScheduleConfigObject | null | undefined): ScheduleConfigObject {
+  if (!config) return {};
+  if (typeof config === 'object') return config;
+  try {
+    return JSON.parse(config) as ScheduleConfigObject;
+  } catch {
+    return {};
+  }
+}
+
 export interface ContentItem {
   // Core identifiers
+  // Note: id is optional in TypeScript but always present in API responses
+  // This allows the type to be used for both creation and retrieval
   id?: number;
   content_id: string;
   client_slug: string;
@@ -346,8 +375,8 @@ export interface ContentItem {
   schedule_at: string;
   timezone?: string;
 
-  // Platform config
-  platforms: string;
+  // Platform config - format: 'ig', 'tt', or 'ig,tt' for multiple
+  platforms: PlatformCode | string; // Allow string for DB compatibility
   instagram_account_id?: string;
   tiktok_account_id?: string;
 
@@ -513,6 +542,76 @@ export interface SettingsResponse {
   success: boolean;
   message?: string;
   data: Settings;
+}
+
+/**
+ * Default settings values for when fields are missing
+ * Prevents crashes when settings.json is incomplete
+ */
+export const DEFAULT_SETTINGS: Settings = {
+  cloudflare_tunnel_url: '',
+  ai_provider: 'ollama',
+  paths: {
+    docker_base: '/data/clients',
+  },
+  ollama: {
+    model: 'llama3.2:3b',
+    timeout_ms: 120000,
+    url_docker: 'http://host.docker.internal:11434/api/generate',
+    models: {
+      image_describer: 'llava:7b',
+      caption_generator: 'llama3.2:3b',
+      caption_supervisor: 'llama3.2:3b',
+      config_generator: 'llama3.2:3b',
+    },
+  },
+  caption_generation: {
+    max_revision_rounds: 3,
+    description_timeout_ms: 120000,
+    generator_timeout_ms: 120000,
+    supervisor_timeout_ms: 60000,
+  },
+};
+
+/**
+ * Merge partial settings with defaults to prevent missing field errors
+ */
+export function mergeWithDefaults(settings: Partial<Settings> | null | undefined): Settings {
+  if (!settings) return { ...DEFAULT_SETTINGS };
+
+  // Merge nested objects carefully to avoid undefined spreading
+  const mergedOllamaModels: OllamaModels = {
+    image_describer: settings.ollama?.models?.image_describer ?? DEFAULT_SETTINGS.ollama.models!.image_describer,
+    caption_generator: settings.ollama?.models?.caption_generator ?? DEFAULT_SETTINGS.ollama.models!.caption_generator,
+    caption_supervisor: settings.ollama?.models?.caption_supervisor ?? DEFAULT_SETTINGS.ollama.models!.caption_supervisor,
+    config_generator: settings.ollama?.models?.config_generator ?? DEFAULT_SETTINGS.ollama.models!.config_generator,
+  };
+
+  const mergedCaptionGeneration: CaptionGenerationConfig = {
+    max_revision_rounds: settings.caption_generation?.max_revision_rounds ?? DEFAULT_SETTINGS.caption_generation!.max_revision_rounds,
+    description_timeout_ms: settings.caption_generation?.description_timeout_ms ?? DEFAULT_SETTINGS.caption_generation!.description_timeout_ms,
+    generator_timeout_ms: settings.caption_generation?.generator_timeout_ms ?? DEFAULT_SETTINGS.caption_generation!.generator_timeout_ms,
+    supervisor_timeout_ms: settings.caption_generation?.supervisor_timeout_ms ?? DEFAULT_SETTINGS.caption_generation!.supervisor_timeout_ms,
+    vlm_max_retries: settings.caption_generation?.vlm_max_retries,
+    vlm_temperature: settings.caption_generation?.vlm_temperature,
+    vlm_max_tokens: settings.caption_generation?.vlm_max_tokens,
+  };
+
+  return {
+    cloudflare_tunnel_url: settings.cloudflare_tunnel_url ?? DEFAULT_SETTINGS.cloudflare_tunnel_url,
+    ai_provider: settings.ai_provider ?? DEFAULT_SETTINGS.ai_provider,
+    paths: {
+      docker_base: settings.paths?.docker_base ?? DEFAULT_SETTINGS.paths.docker_base,
+    },
+    ollama: {
+      model: settings.ollama?.model ?? DEFAULT_SETTINGS.ollama.model,
+      timeout_ms: settings.ollama?.timeout_ms ?? DEFAULT_SETTINGS.ollama.timeout_ms,
+      url_docker: settings.ollama?.url_docker ?? DEFAULT_SETTINGS.ollama.url_docker,
+      models: mergedOllamaModels,
+    },
+    gemini: settings.gemini,
+    caption_generation: mergedCaptionGeneration,
+  };
 }
 
 // ============================================

@@ -471,7 +471,7 @@ export default function BatchDetail() {
         contentItems.refetch();
         // Show completion state briefly, then go idle
         setWorkflowStage('schedule_complete');
-        setTimeout(() => {
+        completionTimeoutRef.current = setTimeout(() => {
           if (isMountedRef.current) setWorkflowStage('idle');
         }, 3000);
       }

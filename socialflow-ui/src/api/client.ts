@@ -529,12 +529,34 @@ export async function testCloudflareUrl(cfUrl: string): Promise<{
     });
 
     if (response.ok) {
-      return {
-        success: true,
-        message: `Tunnel is working! (${response.status})`,
-        url: cfUrl,
-        status_code: response.status,
-      };
+      // Validate response content is actually settings.json
+      try {
+        const text = await response.text();
+        // Check if it's valid JSON and has expected structure
+        const json = JSON.parse(text);
+        if (typeof json === 'object' && json !== null) {
+          return {
+            success: true,
+            message: `Tunnel is working! (${response.status})`,
+            url: cfUrl,
+            status_code: response.status,
+          };
+        } else {
+          return {
+            success: false,
+            message: 'Tunnel returned invalid response - may be pointing to wrong backend',
+            url: cfUrl,
+            status_code: response.status,
+          };
+        }
+      } catch {
+        return {
+          success: false,
+          message: 'Tunnel returned non-JSON response - may be pointing to wrong backend',
+          url: cfUrl,
+          status_code: response.status,
+        };
+      }
     } else {
       return {
         success: false,
@@ -573,10 +595,11 @@ export async function testCloudflareUrl(cfUrl: string): Promise<{
         signal: fallbackController.signal,
       });
 
-      // no-cors returns opaque response, we can't read status but if it doesn't throw, server is reachable
+      // no-cors returns opaque response - we can only tell a server responded, not if it's correct
+      // Report as partial success with warning
       return {
         success: true,
-        message: 'Tunnel is reachable (CORS restricted)',
+        message: 'Server responded but CORS prevented full validation. Verify tunnel URL is correct.',
         url: cfUrl,
       };
     } catch (fallbackErr) {
@@ -720,11 +743,39 @@ export async function rejectItem(
  * @returns Promise resolving to action response with updated item
  * @throws Error if item not found or API request fails
  */
+// Platform caption limits (characters)
+const CAPTION_LIMITS = {
+  instagram: 2200,
+  tiktok: 2200,
+} as const;
+
+/**
+ * Validates caption lengths against platform limits
+ * @throws Error if any caption exceeds limit
+ */
+function validateCaptionLengths(captions: { caption_ig?: string; caption_tt?: string; caption_override?: string }): void {
+  if (captions.caption_ig && captions.caption_ig.length > CAPTION_LIMITS.instagram) {
+    throw new Error(`Instagram caption exceeds ${CAPTION_LIMITS.instagram} character limit (${captions.caption_ig.length} chars)`);
+  }
+  if (captions.caption_tt && captions.caption_tt.length > CAPTION_LIMITS.tiktok) {
+    throw new Error(`TikTok caption exceeds ${CAPTION_LIMITS.tiktok} character limit (${captions.caption_tt.length} chars)`);
+  }
+  // Override applies to both platforms, validate against stricter limit
+  if (captions.caption_override) {
+    const minLimit = Math.min(CAPTION_LIMITS.instagram, CAPTION_LIMITS.tiktok);
+    if (captions.caption_override.length > minLimit) {
+      throw new Error(`Caption override exceeds ${minLimit} character limit (${captions.caption_override.length} chars)`);
+    }
+  }
+}
+
 export async function updateItemCaption(
   id: string | number,
   captions: { caption_ig?: string; caption_tt?: string; caption_override?: string }
 ): Promise<ItemActionResponse> {
   const validatedId = validateId(id);
+  // Validate caption lengths before sending
+  validateCaptionLengths(captions);
   return apiPost<ItemActionResponse>(`/item/${validatedId}/caption`, captions);
 }
 
@@ -1043,13 +1094,15 @@ export async function bulkUpdateSchedule(
  * @param clientId - Client database ID
  * @param batchId - Optional batch ID (null for temporary batch)
  * @param file - File to upload
+ * @param onProgress - Optional callback for upload progress (0-100)
  * @returns Promise resolving to uploaded file info
  * @throws Error if upload fails
  */
 export async function uploadFile(
   clientId: number,
   batchId: number | null,
-  file: File
+  file: File,
+  onProgress?: (percent: number) => void
 ): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
@@ -1058,11 +1111,15 @@ export async function uploadFile(
     formData.append('batch_id', String(batchId));
   }
 
+  // Note: Do NOT set Content-Type header for FormData - axios auto-sets it with boundary
   const { data } = await api.post('/w-upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
     timeout: 120000, // 2 minutes for large files
+    onUploadProgress: onProgress ? (progressEvent) => {
+      if (progressEvent.total) {
+        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        onProgress(percent);
+      }
+    } : undefined,
   });
 
   if (data.success === false) {
@@ -1076,6 +1133,7 @@ export async function uploadFile(
  * @param clientId - Client database ID
  * @param batchId - Optional batch ID
  * @param file - File to upload
+ * @param onProgress - Optional callback for upload progress (0-100)
  * @param maxRetries - Maximum number of retry attempts (default: 3)
  * @returns Promise resolving to uploaded file info
  * @throws Error if all retries fail
@@ -1084,21 +1142,25 @@ async function uploadFileWithRetry(
   clientId: number,
   batchId: number | null,
   file: File,
+  onProgress?: (percent: number) => void,
   maxRetries = 3
 ): Promise<UploadResponse> {
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await uploadFile(clientId, batchId, file);
+      return await uploadFile(clientId, batchId, file, onProgress);
     } catch (error) {
       lastError = error as Error;
-      // Don't retry for validation errors (4xx responses)
-      if (lastError.message.includes('400') || lastError.message.includes('Invalid file')) {
+      // Don't retry for client errors (4xx responses) - these won't succeed on retry
+      const axiosError = error as { response?: { status?: number } };
+      const status = axiosError.response?.status;
+      if (status && status >= 400 && status < 500) {
         throw lastError;
       }
       if (attempt < maxRetries) {
-        // Exponential backoff: 1s, 2s, 4s
-        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+        // Exponential backoff with jitter: base * 2^attempt + random(0-500ms)
+        const backoff = 1000 * Math.pow(2, attempt - 1) + Math.random() * 500;
+        await new Promise(r => setTimeout(r, backoff));
       }
     }
   }
@@ -1110,7 +1172,7 @@ async function uploadFileWithRetry(
  * @param clientId - Client database ID
  * @param batchId - Optional batch ID
  * @param files - Array of files to upload
- * @param onProgress - Optional callback for progress updates
+ * @param onProgress - Optional callback for progress updates (fileIndex, filePercent, totalFiles)
  * @returns Promise resolving to batch upload result
  * @throws Error if upload fails
  */
@@ -1118,7 +1180,7 @@ export async function uploadFiles(
   clientId: number,
   batchId: number | null,
   files: File[],
-  onProgress?: (uploaded: number, total: number) => void
+  onProgress?: (fileIndex: number, filePercent: number, totalFiles: number) => void
 ): Promise<UploadBatchResponse> {
   const results: UploadResponse[] = [];
   let successful = 0;
@@ -1126,15 +1188,25 @@ export async function uploadFiles(
 
   for (let i = 0; i < files.length; i++) {
     try {
-      // Use retry logic for resilience against network issues
-      const result = await uploadFileWithRetry(clientId, batchId, files[i]);
+      // Use retry logic with per-file progress
+      const result = await uploadFileWithRetry(
+        clientId,
+        batchId,
+        files[i],
+        onProgress ? (percent) => onProgress(i, percent, files.length) : undefined
+      );
       results.push(result);
       successful++;
+      // Report 100% for this file
+      if (onProgress) {
+        onProgress(i, 100, files.length);
+      }
     } catch {
       failed++;
-    }
-    if (onProgress) {
-      onProgress(i + 1, files.length);
+      // Report completion even on failure
+      if (onProgress) {
+        onProgress(i, 100, files.length);
+      }
     }
   }
 
