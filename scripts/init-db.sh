@@ -59,16 +59,13 @@ else
     echo "Warning: Agent templates not found at $AGENTS_TEMPLATE"
 fi
 
-# Initialize database if not exists
+# Initialize database if not exists (using Node.js with better-sqlite3)
 if [ ! -f "$DB_PATH" ]; then
     if [ -f "$SCHEMA_PATH" ]; then
         echo "Initializing SQLite database..."
-        sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
-        echo "  Database initialized at: $DB_PATH"
+        node /opt/scripts/init-db.js
     else
         echo "Warning: Schema file not found at $SCHEMA_PATH"
-        echo "  Creating empty database..."
-        sqlite3 "$DB_PATH" "SELECT 1;"
     fi
 else
     echo "Database already exists at: $DB_PATH"
