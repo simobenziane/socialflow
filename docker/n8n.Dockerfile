@@ -5,7 +5,16 @@ FROM n8nio/n8n:latest
 USER root
 
 # Install ffmpeg, sqlite CLI, wget for health checks, and build tools for native modules
-RUN apk add --no-cache ffmpeg sqlite wget curl python3 make g++
+# n8n switched from Alpine to Debian, so we use apt-get
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    sqlite3 \
+    wget \
+    curl \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install better-sqlite3 globally so VM2 sandbox can find it
 RUN npm install -g better-sqlite3
