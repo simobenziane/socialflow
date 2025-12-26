@@ -4,12 +4,17 @@ FROM n8nio/n8n:latest
 # Switch to root to install packages
 USER root
 
-# Install better-sqlite3 in /opt/node-libs (not mounted by volumes)
+# Install better-sqlite3 in /opt/node-libs (for init script)
 RUN mkdir -p /opt/node-libs && cd /opt/node-libs && npm init -y && npm install better-sqlite3
 
-# Also install in n8n's node_modules for workflow use
-RUN cd /usr/local/lib/node_modules/n8n && \
-    npm install better-sqlite3 --save-optional || true
+# Install better-sqlite3 globally so n8n task runner can find it
+RUN npm install -g better-sqlite3
+
+# Install in n8n's main node_modules
+RUN cd /usr/local/lib/node_modules/n8n && npm install better-sqlite3
+
+# Set NODE_PATH so all node processes can find global modules
+ENV NODE_PATH=/usr/local/lib/node_modules
 
 # Create uploads directory
 RUN mkdir -p /data/uploads && chown -R node:node /data/uploads
