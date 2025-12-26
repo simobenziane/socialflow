@@ -68,9 +68,9 @@ export const PIPELINE_STATUS_CONFIG: {
  * Workflow step configuration
  */
 export const WORKFLOW_STEPS = [
-  { key: 'ingest' as const, label: 'Ingest', description: 'Scan & validate media' },
-  { key: 'generate' as const, label: 'AI Gen', description: 'Generate captions' },
-  { key: 'schedule' as const, label: 'Schedule', description: 'Send to Late.com' },
+  { key: 'ingest' as const, label: 'Import', description: 'Scan & import media', tooltip: 'Scan batch folder for new photos and videos, then import them for processing' },
+  { key: 'generate' as const, label: 'AI Gen', description: 'Generate captions', tooltip: 'Use AI to analyze images and generate engaging social media captions' },
+  { key: 'schedule' as const, label: 'Schedule', description: 'Send to Late.com', tooltip: 'Send approved content to Late.com for automatic posting at scheduled times' },
 ];
 
 /**

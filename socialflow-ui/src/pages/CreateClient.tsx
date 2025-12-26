@@ -138,6 +138,23 @@ export default function CreateClient() {
   const [targetAudience, setTargetAudience] = useState('');
   const [brandPersonality, setBrandPersonality] = useState('');
 
+  // Form validation
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const validateStep1 = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = 'Client name is required';
+    if (!slug.trim()) newErrors.slug = 'URL slug is required';
+    if (!businessDescription.trim()) newErrors.businessDescription = 'Business description is required for AI to understand your brand';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleBlur = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
   // Advanced AI fields (collapsible)
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [contentThemes, setContentThemes] = useState('');
@@ -193,6 +210,19 @@ export default function CreateClient() {
 
   // Step navigation
   const handleNext = () => {
+    // Validate current step before proceeding
+    if (currentStep === 1) {
+      // Mark all step 1 fields as touched
+      setTouched({ name: true, slug: true, businessDescription: true });
+      if (!validateStep1()) {
+        toast({
+          title: 'Please fill required fields',
+          description: 'Some required fields are missing.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
     setCurrentStep((prev) => Math.min(prev + 1, 3));
   };
 
@@ -441,20 +471,35 @@ export default function CreateClient() {
                     id="name"
                     value={name}
                     onChange={(e) => handleNameChange(e.target.value)}
+                    onBlur={() => handleBlur('name')}
                     placeholder="Berlin Bistro"
+                    className={touched.name && errors.name ? 'border-destructive' : ''}
+                    aria-invalid={touched.name && !!errors.name}
+                    aria-describedby={errors.name ? 'name-error' : undefined}
                   />
+                  {touched.name && errors.name && (
+                    <p id="name-error" className="text-sm text-destructive">{errors.name}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="slug">URL Slug</Label>
+                  <Label htmlFor="slug">URL Slug *</Label>
                   <Input
                     id="slug"
                     value={slug}
                     onChange={(e) => setSlug(e.target.value)}
+                    onBlur={() => handleBlur('slug')}
                     placeholder="berlin-bistro"
+                    className={touched.slug && errors.slug ? 'border-destructive' : ''}
+                    aria-invalid={touched.slug && !!errors.slug}
+                    aria-describedby={errors.slug ? 'slug-error' : 'slug-hint'}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Used for folder name and URLs
-                  </p>
+                  {touched.slug && errors.slug ? (
+                    <p id="slug-error" className="text-sm text-destructive">{errors.slug}</p>
+                  ) : (
+                    <p id="slug-hint" className="text-xs text-muted-foreground">
+                      Used for folder name and URLs
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -511,12 +556,19 @@ export default function CreateClient() {
                   id="description"
                   value={businessDescription}
                   onChange={(e) => setBusinessDescription(e.target.value)}
+                  onBlur={() => handleBlur('businessDescription')}
                   placeholder="Describe your business in detail. What do you sell? What makes you unique? What's your story?"
-                  className="min-h-[100px]"
+                  className={`min-h-[100px] ${touched.businessDescription && errors.businessDescription ? 'border-destructive' : ''}`}
+                  aria-invalid={touched.businessDescription && !!errors.businessDescription}
+                  aria-describedby={errors.businessDescription ? 'description-error' : 'description-hint'}
                 />
-                <p className="text-xs text-muted-foreground">
-                  This is the most important field. The AI uses this to understand your brand.
-                </p>
+                {touched.businessDescription && errors.businessDescription ? (
+                  <p id="description-error" className="text-sm text-destructive">{errors.businessDescription}</p>
+                ) : (
+                  <p id="description-hint" className="text-xs text-muted-foreground">
+                    This is the most important field. The AI uses this to understand your brand.
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">

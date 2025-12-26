@@ -17,9 +17,14 @@ export function LoadingSpinner({ size = 'md', text, className, variant = 'defaul
   const sizeConfig = sizes[size];
 
   return (
-    <div className={cn('flex flex-col items-center justify-center gap-3 py-8', className)}>
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={text || 'Loading'}
+      className={cn('flex flex-col items-center justify-center gap-3 py-8', className)}
+    >
       {/* Spinner with teal gradient ring */}
-      <div className={cn('relative', sizeConfig.container)}>
+      <div className={cn('relative', sizeConfig.container)} aria-hidden="true">
         {/* Outer spinning ring */}
         <div
           className={cn(
@@ -43,6 +48,8 @@ export function LoadingSpinner({ size = 'md', text, className, variant = 'defaul
       {text && (
         <span className="text-sm text-muted-foreground animate-pulse">{text}</span>
       )}
+      {/* Screen reader only text when no visible text */}
+      {!text && <span className="sr-only">Loading...</span>}
     </div>
   );
 }

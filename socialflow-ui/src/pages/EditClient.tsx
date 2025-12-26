@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -27,11 +27,23 @@ export default function EditClient() {
   const updateClient = useUpdateClient();
   const accounts = useAccounts();
 
+  // Track mounted state for async callbacks
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Form state
   const [name, setName] = useState('');
   const [type, setType] = useState('restaurant');
   const [language, setLanguage] = useState('fr');
   const [timezone, setTimezone] = useState('Europe/Paris');
+
+  // Form validation
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   // Late.com profile selection (v16.4)
   const [lateProfileId, setLateProfileId] = useState('');
   // Schedule times (v17.8) - Format-specific posting times
@@ -48,6 +60,32 @@ export default function EditClient() {
   // AI Caption settings (v16.1, v17.6)
   const [videoAiCaptions, setVideoAiCaptions] = useState(false);
   const [photoAiCaptions, setPhotoAiCaptions] = useState(true);
+
+  // Get profiles and accounts for profile selection - must be before useMemo hooks
+  const profiles = accounts.data?.data?.profiles || [];
+  const allAccounts = accounts.data?.data?.accounts || [];
+
+  // Filter accounts by selected profile - moved up to respect hooks rules
+  const selectedProfileAccounts = useMemo(() => {
+    if (!lateProfileId || lateProfileId === 'none') return [];
+    return allAccounts.filter(a => a.late_profile_id === lateProfileId);
+  }, [lateProfileId, allAccounts]);
+
+  // Check which profiles have all expired accounts (unusable) - moved up to respect hooks rules
+  const profileHealthMap = useMemo(() => {
+    const healthMap = new Map<string, { hasHealthy: boolean; allExpired: boolean; accountCount: number }>();
+    for (const profile of profiles) {
+      const profileAccounts = allAccounts.filter(a => a.late_profile_id === profile.id);
+      const healthyAccounts = profileAccounts.filter(a => a.health === 'healthy' || a.health === 'warning');
+      const expiredAccounts = profileAccounts.filter(a => a.health === 'expired');
+      healthMap.set(profile.id, {
+        hasHealthy: healthyAccounts.length > 0,
+        allExpired: profileAccounts.length > 0 && expiredAccounts.length === profileAccounts.length,
+        accountCount: profileAccounts.length,
+      });
+    }
+    return healthMap;
+  }, [profiles, allAccounts]);
 
   // Initialize form with client data
   useEffect(() => {
@@ -81,14 +119,39 @@ export default function EditClient() {
   // N11: State for profile unlink confirmation
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
 
+  // Form validation function
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) {
+      newErrors.name = 'Client name is required';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleBlur = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    // Validate on blur
+    if (field === 'name' && !name.trim()) {
+      setErrors(prev => ({ ...prev, name: 'Client name is required' }));
+    } else if (field === 'name') {
+      setErrors(prev => {
+        const { name: _, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (updateClient.isPending || !slug) return;
 
-    if (!name) {
+    // Mark all fields as touched and validate
+    setTouched({ name: true });
+    if (!validateForm()) {
       toast({
-        title: 'Validation error',
-        description: 'Name is required',
+        title: 'Please fill required fields',
+        description: 'Some required fields are missing.',
         variant: 'destructive',
       });
       return;
@@ -108,7 +171,8 @@ export default function EditClient() {
     }
 
     // N11: Confirm before unlinking profile
-    const isUnlinking = originalProfileId && (lateProfileId === 'none' || !lateProfileId);
+    const currentProfileId = client.data?.data?.late_profile_id || '';
+    const isUnlinking = currentProfileId && (lateProfileId === 'none' || !lateProfileId);
     if (isUnlinking && !showUnlinkConfirm) {
       setShowUnlinkConfirm(true);
       toast({
@@ -149,6 +213,9 @@ export default function EditClient() {
         },
       });
 
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
+
       toast({
         title: 'Client updated',
         description: `Successfully updated ${name}`,
@@ -156,6 +223,7 @@ export default function EditClient() {
 
       navigate(`/clients/${slug}`);
     } catch (error) {
+      if (!isMountedRef.current) return;
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to update client',
@@ -185,32 +253,6 @@ export default function EditClient() {
   if (!clientData) {
     return <ErrorAlert message="Client not found" />;
   }
-
-  // Get profiles and accounts for profile selection
-  const profiles = accounts.data?.data?.profiles || [];
-  const allAccounts = accounts.data?.data?.accounts || [];
-
-  // Filter accounts by selected profile
-  const selectedProfileAccounts = useMemo(() => {
-    if (!lateProfileId || lateProfileId === 'none') return [];
-    return allAccounts.filter(a => a.late_profile_id === lateProfileId);
-  }, [lateProfileId, allAccounts]);
-
-  // Check which profiles have all expired accounts (unusable)
-  const profileHealthMap = useMemo(() => {
-    const healthMap = new Map<string, { hasHealthy: boolean; allExpired: boolean; accountCount: number }>();
-    for (const profile of profiles) {
-      const profileAccounts = allAccounts.filter(a => a.late_profile_id === profile.id);
-      const healthyAccounts = profileAccounts.filter(a => a.health === 'healthy' || a.health === 'warning');
-      const expiredAccounts = profileAccounts.filter(a => a.health === 'expired');
-      healthMap.set(profile.id, {
-        hasHealthy: healthyAccounts.length > 0,
-        allExpired: profileAccounts.length > 0 && expiredAccounts.length === profileAccounts.length,
-        accountCount: profileAccounts.length,
-      });
-    }
-    return healthMap;
-  }, [profiles, allAccounts]);
 
   // Check if profile is changing from what was originally set
   const originalProfileId = clientData?.late_profile_id || '';
@@ -242,9 +284,16 @@ export default function EditClient() {
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  onBlur={() => handleBlur('name')}
                   placeholder="Berlin Doner"
+                  className={touched.name && errors.name ? 'border-destructive' : ''}
+                  aria-invalid={touched.name && !!errors.name}
+                  aria-describedby={errors.name ? 'name-error' : undefined}
                   required
                 />
+                {touched.name && errors.name && (
+                  <p id="name-error" className="text-sm text-destructive">{errors.name}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="slug">Slug</Label>

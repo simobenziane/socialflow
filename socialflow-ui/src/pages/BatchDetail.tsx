@@ -103,7 +103,7 @@ export default function BatchDetail() {
   const [workflowStage, setWorkflowStage] = useState<WorkflowStage>('idle');
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(true); // Expanded by default for discoverability
 
   // AI Caption settings state (v16.1, v17.6)
   const currentBatch = batchesData.data?.data?.batches?.find(b => b.slug === batch);
@@ -358,7 +358,8 @@ export default function BatchDetail() {
   }, [workflowStage, isGenerationRunning, generationProgressQuery.data, batchStatus, contentItems, toast]);
 
   const handleIngest = async () => {
-    if (ingest.isPending || workflowStage === 'ingesting') return;
+    // Prevent concurrent workflow operations
+    if (ingest.isPending || workflowStage !== 'idle') return;
     setWorkflowStage('ingesting');
     try {
       const result = await ingest.mutateAsync({ client, batch });
@@ -428,7 +429,8 @@ export default function BatchDetail() {
   };
 
   const handleGenerate = async () => {
-    if (generate.isPending || workflowStage === 'generating') return;
+    // Prevent concurrent workflow operations
+    if (generate.isPending || workflowStage !== 'idle') return;
     setWorkflowStage('generating');
     try {
       const result = await generate.mutateAsync({ client, batch });
@@ -458,7 +460,8 @@ export default function BatchDetail() {
   };
 
   const handleSchedule = async () => {
-    if (schedule.isPending) return;
+    // Prevent concurrent workflow operations
+    if (schedule.isPending || workflowStage !== 'idle') return;
     setWorkflowStage('scheduling');
     try {
       const result = await schedule.mutateAsync({ client, batch });
@@ -753,6 +756,7 @@ export default function BatchDetail() {
                           onClick={handleIngest}
                           disabled={isWorkflowRunning || ingest.isPending}
                           variant={state === 'ready' ? 'default' : 'outline'}
+                          title={step.tooltip}
                         >
                           {workflowStage === 'ingesting' ? (
                             <>
@@ -768,7 +772,7 @@ export default function BatchDetail() {
                           ) : (
                             <>
                               <Play className="mr-1 h-3 w-3" />
-                              Ingest
+                              Import
                             </>
                           )}
                         </Button>
@@ -779,6 +783,7 @@ export default function BatchDetail() {
                           onClick={handleGenerate}
                           disabled={isWorkflowRunning || generate.isPending || counts.needs_ai === 0}
                           variant={counts.needs_ai > 0 ? 'default' : 'outline'}
+                          title={step.tooltip}
                         >
                           {workflowStage === 'generating' ? (
                             <>
@@ -799,6 +804,7 @@ export default function BatchDetail() {
                           onClick={handleSchedule}
                           disabled={isWorkflowRunning || schedule.isPending || counts.approved === 0}
                           variant={counts.approved > 0 ? 'default' : 'outline'}
+                          title={step.tooltip}
                         >
                           {workflowStage === 'scheduling' ? (
                             <>

@@ -151,7 +151,7 @@ export default function Dashboard() {
       />
 
       {/* Hero Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Primary Stat - Clients with gradient */}
         <Card className="relative overflow-hidden bg-gradient-to-br from-teal-500 to-cyan-500 dark:from-teal-600 dark:to-cyan-700 text-white border-0 shadow-lg">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />

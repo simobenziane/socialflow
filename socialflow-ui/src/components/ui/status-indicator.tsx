@@ -143,7 +143,8 @@ function StatusIndicator({
   showIcon = false,
   className,
 }: StatusIndicatorProps) {
-  const config = STATUS_CONFIG[status]
+  // Fallback to PENDING for invalid status values
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING
   const sizes = sizeClasses[size]
   const Icon = config.icon
 
@@ -186,7 +187,8 @@ function StatusDot({
   size?: "sm" | "md" | "lg"
   className?: string
 }) {
-  const config = STATUS_CONFIG[status]
+  // Fallback to PENDING for invalid status values
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING
   const sizes = sizeClasses[size]
 
   return (
@@ -205,7 +207,8 @@ function StatusDot({
 
 // Export utility for getting status config
 function getStatusConfig(status: ContentStatus): StatusConfig {
-  return STATUS_CONFIG[status]
+  // Fallback to PENDING for invalid status values
+  return STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING
 }
 
 export { StatusIndicator, StatusDot, getStatusConfig, STATUS_CONFIG }

@@ -49,6 +49,56 @@ export const API_TIMEOUTS = {
   WORKFLOW: 120_000,      // 2 minutes for workflows
 } as const;
 
+// ============================================
+// User-Friendly Error Messages
+// ============================================
+
+/**
+ * Convert technical error messages to user-friendly messages
+ * Use this in error handling to show users helpful information
+ */
+export function getUserFriendlyError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const axiosError = error as AxiosError;
+  const status = axiosError?.response?.status;
+
+  // Handle HTTP status codes
+  if (status === 404) {
+    return 'This item was not found. It may have been deleted or moved.';
+  }
+  if (status === 401 || status === 403) {
+    return 'You don\'t have permission to perform this action. Please refresh the page.';
+  }
+  if (status === 409) {
+    return 'This action conflicts with existing data. Please refresh and try again.';
+  }
+  if (status === 422) {
+    return 'The submitted data is invalid. Please check your inputs.';
+  }
+  if (status === 429) {
+    return 'Too many requests. Please wait a moment and try again.';
+  }
+  if (status && status >= 500) {
+    return 'The server encountered an error. Please try again later.';
+  }
+
+  // Handle network errors
+  if (message.toLowerCase().includes('network') || message.toLowerCase().includes('timeout')) {
+    return 'Network connection failed. Please check your internet connection.';
+  }
+  if (message.toLowerCase().includes('cors')) {
+    return 'Connection blocked. The server may be unavailable.';
+  }
+
+  // Handle specific error messages
+  if (message.toLowerCase().includes('caption') && message.toLowerCase().includes('limit')) {
+    return message; // Keep caption limit messages as-is
+  }
+
+  // Default fallback
+  return 'Something went wrong. Please try again.';
+}
+
 /**
  * Helper to encode URL path segments - reduces repeated encodeURIComponent calls
  */

@@ -68,6 +68,8 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
       {/* Sidebar - Glass Effect */}
       <aside
+        role="navigation"
+        aria-label="Main navigation"
         className={cn(
           'fixed inset-y-0 left-0 z-50 w-64 p-4 flex flex-col',
           'bg-white/80 backdrop-blur-xl border-r border-white/20',
@@ -124,7 +126,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                     )
                   }
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-4 w-4" aria-hidden="true" />
                   {item.label}
                 </NavLink>
 

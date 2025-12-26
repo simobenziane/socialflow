@@ -408,7 +408,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Late.com Status */}
           <div className={cn(
             'flex items-start gap-3 p-4 rounded-xl border transition-colors',

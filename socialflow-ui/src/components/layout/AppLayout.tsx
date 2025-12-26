@@ -10,6 +10,14 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen">
+      {/* Skip link for keyboard accessibility - visible only on focus */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-primary focus:text-primary-foreground focus:px-4 focus:py-2 focus:rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        Skip to main content
+      </a>
+
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -26,7 +34,7 @@ export function AppLayout() {
           <h1 className="font-semibold">SocialFlow</h1>
         </header>
 
-        <main className="flex-1 overflow-auto">
+        <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
           <div className="container mx-auto p-6 max-w-6xl">
             <Outlet />
           </div>

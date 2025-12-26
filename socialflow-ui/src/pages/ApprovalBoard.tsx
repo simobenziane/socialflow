@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useDeferredValue } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,6 +6,16 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { GlassPanel } from '@/components/ui/glass-panel';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useBatchStatus, useClient, useContentItems, useApproveItem, useRejectItem, useUpdateItemCaption, useApproveBatchItems } from '@/hooks';
 import { ErrorAlert, EmptyState, PageHeader } from '@/components/shared';
 import { SkeletonContentGrid } from '@/components/ui/skeleton';
@@ -21,6 +31,8 @@ import {
   CheckCheck,
   Search,
   X,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 
 type FilterTab = 'review' | 'approved' | 'scheduled' | 'all';
@@ -35,6 +47,8 @@ export default function ApprovalBoard() {
   // UI state
   const [activeFilter, setActiveFilter] = useState<FilterTab>('review');
   const [searchQuery, setSearchQuery] = useState('');
+  // Use deferred value for search to prevent blocking on every keystroke
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   // Selection state for bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
@@ -44,6 +58,14 @@ export default function ApprovalBoard() {
   const rejectItemMutation = useRejectItem();
   const updateCaptionMutation = useUpdateItemCaption();
   const approveBatchMutation = useApproveBatchItems();
+
+  // Track which item is currently being processed
+  const [approvingItemId, setApprovingItemId] = useState<string | number | null>(null);
+  const [rejectingItemId, setRejectingItemId] = useState<string | number | null>(null);
+
+  // Confirmation dialog state
+  const [itemToReject, setItemToReject] = useState<ContentItem | null>(null);
+  const [showBulkApproveConfirm, setShowBulkApproveConfirm] = useState(false);
 
   // Note: toast is stable (from useToast hook), so we don't need it in deps
   // This prevents unnecessary re-creation of callbacks that would break React.memo
@@ -58,14 +80,17 @@ export default function ApprovalBoard() {
       });
       return;
     }
+    setApprovingItemId(id);
     approveItemMutation.mutate(id, {
       onSuccess: (response) => {
+        setApprovingItemId(null);
         toast({
           title: 'Item Approved',
           description: response.message || `"${item.file}" has been approved.`,
         });
       },
       onError: (error) => {
+        setApprovingItemId(null);
         toast({
           title: 'Error',
           description: error.message || 'Failed to approve item.',
@@ -75,27 +100,38 @@ export default function ApprovalBoard() {
     });
   }, [approveItemMutation]);
 
-  const handleReject = useCallback((item: ContentItem) => {
-    if (rejectItemMutation.isPending) return;
-    const id = item.id ?? item.content_id;
+  // Opens confirmation dialog for rejection
+  const handleRejectRequest = useCallback((item: ContentItem) => {
+    setItemToReject(item);
+  }, []);
+
+  // Actually performs the rejection after confirmation
+  const handleConfirmReject = useCallback(() => {
+    if (!itemToReject || rejectItemMutation.isPending) return;
+    const id = itemToReject.id ?? itemToReject.content_id;
     if (id == null) {
       toast({
         title: 'Error',
         description: 'Unable to identify item. Missing ID.',
         variant: 'destructive',
       });
+      setItemToReject(null);
       return;
     }
+    setRejectingItemId(id);
+    setItemToReject(null);
     rejectItemMutation.mutate(
       { id, reason: 'Rejected from approval board' },
       {
         onSuccess: (response) => {
+          setRejectingItemId(null);
           toast({
             title: 'Item Rejected',
-            description: response.message || `"${item.file}" has been rejected.`,
+            description: response.message || `"${itemToReject.file}" has been rejected.`,
           });
         },
         onError: (error) => {
+          setRejectingItemId(null);
           toast({
             title: 'Error',
             description: error.message || 'Failed to reject item.',
@@ -104,7 +140,7 @@ export default function ApprovalBoard() {
         },
       }
     );
-  }, [rejectItemMutation]);
+  }, [itemToReject, rejectItemMutation]);
 
   const handleEditCaption = useCallback((item: ContentItem, newCaption: string) => {
     const id = item.id ?? item.content_id;
@@ -242,13 +278,14 @@ export default function ApprovalBoard() {
     }
 
     // Apply search filter using cached lowercase text (O(n) instead of O(n*m))
-    const query = searchQuery.trim().toLowerCase();
+    // Use deferred query for better performance on rapid typing
+    const query = deferredSearchQuery.trim().toLowerCase();
     if (query) {
       filtered = filtered.filter(item => item._searchText.includes(query));
     }
 
     return filtered;
-  }, [activeFilter, searchQuery, itemsWithSearchCache, needsReviewItems, approvedItems, scheduledItems]);
+  }, [activeFilter, deferredSearchQuery, itemsWithSearchCache, needsReviewItems, approvedItems, scheduledItems]);
 
   // Use ref to avoid re-attaching keyboard listener on displayedItems changes
   const displayedItemsRef = useRef(displayedItems);
@@ -519,9 +556,11 @@ export default function ApprovalBoard() {
                 <ContentPreviewCard
                   item={item}
                   onApprove={handleApprove}
-                  onReject={handleReject}
+                  onReject={handleRejectRequest}
                   onEditCaption={handleEditCaption}
-                  disabled={approveItemMutation.isPending || rejectItemMutation.isPending || approveBatchMutation.isPending}
+                  disabled={approveBatchMutation.isPending}
+                  isApproving={approvingItemId === itemId}
+                  isRejecting={rejectingItemId === itemId}
                 />
               </div>
             );
@@ -538,12 +577,27 @@ export default function ApprovalBoard() {
                 {selectedIds.size} selected
               </Badge>
               <Button
-                onClick={handleBulkApprove}
+                onClick={() => {
+                  if (selectedIds.size > 1) {
+                    setShowBulkApproveConfirm(true);
+                  } else {
+                    handleBulkApprove();
+                  }
+                }}
                 disabled={approveBatchMutation.isPending}
                 className="shadow-md"
               >
-                <CheckCheck className="mr-2 h-4 w-4" />
-                {approveBatchMutation.isPending ? 'Approving...' : 'Approve All'}
+                {approveBatchMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Approving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCheck className="mr-2 h-4 w-4" />
+                    Approve All ({selectedIds.size})
+                  </>
+                )}
               </Button>
               <Button variant="outline" size="sm" onClick={clearSelection}>
                 <X className="mr-1 h-3 w-3" />
@@ -576,6 +630,54 @@ export default function ApprovalBoard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Reject Confirmation Dialog */}
+      <AlertDialog open={!!itemToReject} onOpenChange={(open) => !open && setItemToReject(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Reject this item?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will mark "{itemToReject?.file_name || itemToReject?.file || 'this item'}" as rejected.
+              You can re-run the AI generation workflow to create new content.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmReject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Reject
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Approve Confirmation Dialog */}
+      <AlertDialog open={showBulkApproveConfirm} onOpenChange={setShowBulkApproveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve {selectedIds.size} items?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will approve all selected items at once. They will be ready for scheduling.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowBulkApproveConfirm(false);
+                handleBulkApprove();
+              }}
+            >
+              Approve All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -8,8 +8,17 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+// Maximum toasts visible at once - allows users to see multiple notifications
+const TOAST_LIMIT = 3
+// Delay before removing closed toast from DOM (allows animation to complete)
+const TOAST_REMOVE_DELAY = 1000
+
+// Auto-dismiss duration by variant (ms)
+const TOAST_DURATION = {
+  default: 4000,     // 4 seconds for info
+  success: 3000,     // 3 seconds for success
+  destructive: 6000, // 6 seconds for errors (users need time to read)
+} as const;
 
 type ToasterToast = ToastProps & {
   id: string
@@ -152,11 +161,16 @@ function toast({ ...props }: Toast) {
     })
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
+  // Determine duration based on variant if not explicitly provided
+  const variant = props.variant || 'default';
+  const duration = props.duration ?? TOAST_DURATION[variant as keyof typeof TOAST_DURATION] ?? TOAST_DURATION.default;
+
   dispatch({
     type: "ADD_TOAST",
     toast: {
       ...props,
       id,
+      duration,
       open: true,
       onOpenChange: (open) => {
         if (!open) dismiss()

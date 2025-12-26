@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusIndicator, type ContentStatus } from '@/components/ui/status-indicator';
 import type { ContentItem } from '@/api/types';
-import { Check, X, Edit2, ExternalLink, MessageSquare, Video } from 'lucide-react';
+import { Check, X, Edit2, ExternalLink, MessageSquare, Video, Loader2 } from 'lucide-react';
 import { getLatePostUrl } from '@/config/constants';
 import { getVideoCoverUrl } from '@/lib/media';
 import { AIConversationViewer } from './AIConversationViewer';
@@ -18,6 +18,8 @@ interface ContentPreviewCardProps {
   onReject?: (item: ContentItem) => void;
   onEditCaption?: (item: ContentItem, newCaption: string) => void;
   disabled?: boolean;
+  isApproving?: boolean;
+  isRejecting?: boolean;
 }
 
 export const ContentPreviewCard = React.memo(function ContentPreviewCard({
@@ -26,6 +28,8 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
   onReject,
   onEditCaption,
   disabled = false,
+  isApproving = false,
+  isRejecting = false,
 }: ContentPreviewCardProps) {
   // Bug fix: Handle null/undefined caption_ig with fallback to empty string
   const [isEditing, setIsEditing] = useState(false);
@@ -136,11 +140,11 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
           </div>
         )}
 
-        {/* Hover Overlay with Quick Actions */}
+        {/* Hover Overlay with Quick Actions - Also shows on focus-within for keyboard accessibility */}
         {canApprove && (
           <div className={cn(
             'absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center gap-3 transition-opacity duration-200',
-            'opacity-0 group-hover:opacity-100'
+            'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
           )}>
             <Button
               variant="success"
@@ -165,13 +169,14 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
           </div>
         )}
 
-        {/* Status Badge - Top Left */}
-        <div className="absolute top-3 right-3 z-10">
+        {/* Status Badge - Top Left for better visibility */}
+        <div className="absolute top-3 left-3 z-10">
           <StatusIndicator
             status={(item.status || 'PENDING') as ContentStatus}
             size="sm"
             showLabel={true}
             showIcon={false}
+            className="backdrop-blur-sm"
           />
         </div>
 
@@ -211,13 +216,15 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
           </span>
         </div>
         {/* Platform toggles (v17.8) - Click to enable/disable platforms */}
-        <div className="flex gap-1.5 mt-1.5">
+        <div className="flex gap-2 mt-1.5" role="group" aria-label="Target platforms">
           <button
             type="button"
             onClick={() => togglePlatform('ig')}
             disabled={disabled || updatePlatformsMutation.isPending}
+            aria-pressed={hasIG}
+            aria-label={hasIG ? 'Remove from Instagram' : 'Add to Instagram'}
             className={cn(
-              'px-2 py-0.5 rounded text-xs font-medium transition-all duration-150',
+              'min-h-[44px] min-w-[44px] px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 inline-flex items-center justify-center gap-1.5',
               'focus:outline-none focus:ring-2 focus:ring-offset-1',
               hasIG
                 ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm focus:ring-pink-400'
@@ -226,14 +233,17 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
             )}
             title={hasIG ? 'Click to disable Instagram' : 'Click to enable Instagram'}
           >
-            IG {hasIG && '✓'}
+            IG
+            {hasIG && <Check className="h-4 w-4" aria-hidden="true" />}
           </button>
           <button
             type="button"
             onClick={() => togglePlatform('tt')}
             disabled={disabled || updatePlatformsMutation.isPending}
+            aria-pressed={hasTT}
+            aria-label={hasTT ? 'Remove from TikTok' : 'Add to TikTok'}
             className={cn(
-              'px-2 py-0.5 rounded text-xs font-medium transition-all duration-150',
+              'min-h-[44px] min-w-[44px] px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 inline-flex items-center justify-center gap-1.5',
               'focus:outline-none focus:ring-2 focus:ring-offset-1',
               hasTT
                 ? 'bg-black text-white shadow-sm focus:ring-gray-400 dark:bg-white dark:text-black'
@@ -242,7 +252,8 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
             )}
             title={hasTT ? 'Click to disable TikTok' : 'Click to enable TikTok'}
           >
-            TT {hasTT && '✓'}
+            TT
+            {hasTT && <Check className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
       </CardHeader>
@@ -288,39 +299,52 @@ export const ContentPreviewCard = React.memo(function ContentPreviewCard({
             className="flex-1"
             size="sm"
             onClick={() => onApprove?.(item)}
-            disabled={disabled}
+            disabled={disabled || isApproving}
           >
-            <Check className="mr-1 h-3 w-3" />
-            Approve
+            {isApproving ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Approving...
+              </>
+            ) : (
+              <>
+                <Check className="mr-1 h-3 w-3" />
+                Approve
+              </>
+            )}
           </Button>
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon"
             onClick={() => setIsEditing(true)}
-            disabled={disabled || isEditing}
+            disabled={disabled || isEditing || isApproving || isRejecting}
             aria-label="Edit caption"
           >
-            <Edit2 className="h-3.5 w-3.5" />
+            <Edit2 className="h-4 w-4" />
           </Button>
           <AIConversationViewer
             client={item.client_slug}
             batch={item.batch_name}
             contentId={item.content_id}
             trigger={
-              <Button variant="ghost" size="icon-sm" aria-label="View AI conversation">
-                <MessageSquare className="h-3.5 w-3.5" />
+              <Button variant="ghost" size="icon" aria-label="View AI conversation">
+                <MessageSquare className="h-4 w-4" />
               </Button>
             }
           />
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon"
             onClick={() => onReject?.(item)}
-            disabled={disabled}
+            disabled={disabled || isRejecting}
             className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            aria-label="Reject"
+            aria-label={isRejecting ? "Rejecting..." : "Reject"}
           >
-            <X className="h-3.5 w-3.5" />
+            {isRejecting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <X className="h-4 w-4" />
+            )}
           </Button>
         </CardFooter>
       )}
