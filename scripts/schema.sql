@@ -50,8 +50,9 @@ CREATE TABLE IF NOT EXISTS clients (
     onboarding_data TEXT,  -- JSON: original form responses from onboarding
     ai_generated INTEGER DEFAULT 0,  -- 1 if config files were AI-generated
 
-    -- Video AI Settings (v16.1)
+    -- AI Caption Settings (v16.1)
     video_ai_captions INTEGER DEFAULT 0,  -- 0 = skip AI (manual captions), 1 = generate AI captions for videos
+    photo_ai_captions INTEGER DEFAULT 1,  -- 0 = skip AI (manual captions), 1 = generate AI captions for photos
 
     -- Late.com Profile Linking (v16.4)
     late_profile_id TEXT,  -- Links to Late.com profile ID; all accounts under this profile belong to this client
@@ -120,8 +121,9 @@ CREATE TABLE IF NOT EXISTS batches (
     -- AI Generation (Phase 3)
     ai_generated_brief INTEGER DEFAULT 0,  -- 1 if brief was AI-generated
 
-    -- Video AI Settings (v16.1)
+    -- AI Caption Settings (v16.1)
     video_ai_captions INTEGER DEFAULT NULL,  -- NULL = inherit from client, 0 = skip, 1 = generate
+    photo_ai_captions INTEGER DEFAULT NULL,  -- NULL = inherit from client, 0 = skip, 1 = generate
 
     -- Generation Progress (v12)
     generation_progress TEXT,  -- JSON: {current: 5, total: 20, stage: 'generating', round: 2}
