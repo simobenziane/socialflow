@@ -7,11 +7,8 @@ USER root
 # Install better-sqlite3 in /opt/node-libs (for init script)
 RUN mkdir -p /opt/node-libs && cd /opt/node-libs && npm init -y && npm install better-sqlite3
 
-# Install better-sqlite3 globally so n8n task runner can find it
+# Install better-sqlite3 globally
 RUN npm install -g better-sqlite3
-
-# Install in n8n's main node_modules
-RUN cd /usr/local/lib/node_modules/n8n && npm install better-sqlite3
 
 # Set NODE_PATH so all node processes can find global modules
 ENV NODE_PATH=/usr/local/lib/node_modules
