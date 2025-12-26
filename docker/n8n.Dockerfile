@@ -4,8 +4,8 @@ FROM n8nio/n8n:latest
 # Switch to root to install packages
 USER root
 
-# Install better-sqlite3 in /opt/scripts so init-db.js can find it
-RUN mkdir -p /opt/scripts && cd /opt/scripts && npm init -y && npm install better-sqlite3
+# Install better-sqlite3 in /opt/node-libs (not mounted by volumes)
+RUN mkdir -p /opt/node-libs && cd /opt/node-libs && npm init -y && npm install better-sqlite3
 
 # Also install in n8n's node_modules for workflow use
 RUN cd /usr/local/lib/node_modules/n8n && \

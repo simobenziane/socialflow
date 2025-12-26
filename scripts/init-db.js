@@ -4,7 +4,8 @@
  * Uses better-sqlite3 since n8n image doesn't have sqlite3 CLI
  */
 
-const Database = require('better-sqlite3');
+// Load from /opt/node-libs where it's installed in the Docker image
+const Database = require('/opt/node-libs/node_modules/better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
