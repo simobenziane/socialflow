@@ -4,11 +4,10 @@ FROM n8nio/n8n:latest
 # Switch to root to install packages
 USER root
 
-# Install better-sqlite3 globally (for init script and workflow use)
-# The n8n image is minimal/distroless, so we skip system packages
-RUN npm install -g better-sqlite3
+# Install better-sqlite3 in /opt/scripts so init-db.js can find it
+RUN mkdir -p /opt/scripts && cd /opt/scripts && npm init -y && npm install better-sqlite3
 
-# Also install in n8n's node_modules for direct access
+# Also install in n8n's node_modules for workflow use
 RUN cd /usr/local/lib/node_modules/n8n && \
     npm install better-sqlite3 --save-optional || true
 
